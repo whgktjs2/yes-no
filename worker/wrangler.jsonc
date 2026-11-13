@@ -6,7 +6,6 @@
   "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
   "vars": {
-    "ALLOWED_ORIGINS": "https://whgktjs2.io"
     "ALLOWED_ORIGINS": "https://whgktjs2.github.io,http://127.0.0.1:5173,http://localhost:5173"
 
   }
