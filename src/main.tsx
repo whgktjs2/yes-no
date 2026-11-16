@@ -163,7 +163,7 @@ function App() {
     </header>
 
     {!room ? <div className="lobby-content">
-      <div className="intro"><span className="eyebrow"><i /> TOGETHER, IN REAL TIME</span><h1>말 대신,<br /><span>YES 또는 NO.</span></h1><p>같은 마음인지, 지금 괜찮은지.<br />작은 신호 하나로 서로의 상태를 확인하세요.</p></div>
+      <div className="intro"><span className="eyebrow"><i /> TOGETHER, IN REAL TIME</span><h1>말 대신,<br /><span>YES 또는 NO.</span></h1><p>같은 생각인지, 지금 괜찮은지.<br />작은 신호 하나로 서로의 상태를 확인하세요.</p></div>
       <div className="lobby-sample" aria-hidden="true"><div className="sample-no"><span>상대방</span><strong>NO</strong></div><div className="sample-yes"><span>나</span><strong>YES</strong></div></div>
       <div className="join-card"><div className="join-card-heading"><h2>함께 시작하기</h2><span>최대 {MAX_PARTICIPANTS}명</span></div>
         <button className="primary-button create-button" onClick={createRoom} disabled={busy}>{busy ? '방 만드는 중…' : '새 방 만들기'}<Icon name="arrow" /></button>
@@ -172,7 +172,7 @@ function App() {
         {formError && <p className="form-error" role="alert">{formError}</p>}
         <p className="card-footnote">가입 없이, 링크 하나로 연결돼요.</p>
       </div>
-      <div className="lobby-foot"><span>내 상태는 오른쪽 · 상대방은 왼쪽</span><span>iPad & Laptop</span></div>
+      <div className="lobby-foot"><span>내 상태는 오른쪽 · 상대방은 왼쪽</span><span>whgktjs</span></div>
     </div> : error || !API_URL ? <div className="connection-card"><span className="eyebrow">잠시 확인해 주세요</span><h1>{error || '연결 설정이 필요합니다.'}</h1><p>{!API_URL ? 'README의 안내에 따라 서버 주소를 설정해 주세요.' : '방 코드와 연결 상태를 확인한 뒤 다시 시도해 주세요.'}</p><div className="dialog-actions"><button className="secondary-button" onClick={leave}>시작 화면으로</button><button className="primary-button" onClick={connection.retry}>다시 연결</button></div></div> : <>
       <div className="board" aria-busy={!snapshot}>
         <div className={`peers ${peers.length > 2 ? 'many-peers' : peers.length > 1 ? 'two-peers' : ''}`} aria-label="상대방 영역">
