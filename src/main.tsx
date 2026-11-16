@@ -1,6 +1,7 @@
 import { StrictMode, useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { API_URL, peerLabel, storageGet, storageRemove, storageSet, useRoom } from './connection';
+import { emptyPeerOrder, nextDemotionAt, reconcilePeerOrder } from './peer-order';
 import { formatRoom, MAX_PARTICIPANTS, memberLabel, normalizeRoom, ROOM_PATTERN, type MemberView } from '../shared/protocol';
 import './styles.css';
 
@@ -56,7 +57,21 @@ function App() {
   const { snapshot, status, error, pending, pushOn } = connection;
   const online = status === 'connected';
   const self = snapshot?.members.find(m => m.id === snapshot.selfId);
-  const peers = snapshot?.members.filter(m => m.id !== snapshot.selfId).sort((a, b) => a.slot - b.slot) || [];
+  const [peerOrder, setPeerOrder] = useState(emptyPeerOrder);
+  useEffect(() => {
+    setPeerOrder(previous => reconcilePeerOrder(previous, room, snapshot, Date.now()));
+  }, [room, snapshot]);
+  useEffect(() => {
+    const deadline = nextDemotionAt(peerOrder);
+    if (deadline === null) return;
+    const timer = window.setTimeout(() => {
+      setPeerOrder(previous => reconcilePeerOrder(previous, room, snapshot, Date.now()));
+    }, Math.max(1, deadline - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [peerOrder, room, snapshot]);
+  const rank = new Map((peerOrder.room === room ? peerOrder.order : []).map((id, index) => [id, index]));
+  const peers = snapshot?.members.filter(m => m.id !== snapshot.selfId).sort((a, b) =>
+    (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER) || a.slot - b.slot) || [];
 
   useEffect(() => { if (online && room) storageSet('yn:lastRoom', room); }, [online, room]);
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyRoom, joinRoom, setChoice, setName, validPushSubscription } from '../worker/state.ts';
+import { OFFLINE_EVICTION_MS, emptyRoom, joinRoom, nextOfflineEviction, reconcilePresence, setChoice, setName, validPushSubscription } from '../worker/state.ts';
 import { MAX_PARTICIPANTS, ROOM_PATTERN, formatRoom, memberLabel, normalizeRoom } from '../shared/protocol.ts';
 
 test('Only four digit room codes are accepted and displayed', () => {
@@ -27,6 +27,45 @@ test('A room has twenty slots; the same credential rejoins even when full', () =
   assert.throws(() => joinRoom(room, 'extra'), /ROOM_FULL/);
   assert.equal(joinRoom(room, 'first').id, first.id);
   assert.equal(room.members.length, MAX_PARTICIPANTS);
+});
+
+test('A disconnected member keeps their place until ten minutes and then frees it', () => {
+  const room = emptyRoom(), a = joinRoom(room, 'a'), b = joinRoom(room, 'b');
+  assert.equal(reconcilePresence(room, new Set([a.id, b.id]), 100), false);
+  assert.equal(reconcilePresence(room, new Set([a.id]), 200), true);
+  assert.equal(b.offlineSince, 200);
+  assert.equal(nextOfflineEviction(room), 200 + OFFLINE_EVICTION_MS);
+  assert.equal(reconcilePresence(room, new Set([a.id]), 200 + OFFLINE_EVICTION_MS - 1), false);
+  assert.equal(room.members.length, 2);
+  assert.equal(reconcilePresence(room, new Set([a.id]), 200 + OFFLINE_EVICTION_MS), true);
+  assert.deepEqual(room.members.map(m => m.id), [a.id]);
+  assert.equal(nextOfflineEviction(room), null);
+  const returned = joinRoom(room, 'b');
+  assert.notEqual(returned.id, b.id);
+  assert.equal(returned.slot, 3);
+});
+
+test('Reconnecting before ten minutes cancels eviction and multiple offline deadlines stay separate', () => {
+  const room = emptyRoom(), a = joinRoom(room, 'a'), b = joinRoom(room, 'b'), c = joinRoom(room, 'c');
+  reconcilePresence(room, new Set([a.id, c.id]), 100);
+  reconcilePresence(room, new Set([a.id]), 200);
+  assert.equal(nextOfflineEviction(room), 100 + OFFLINE_EVICTION_MS);
+  reconcilePresence(room, new Set([a.id, b.id]), 100 + OFFLINE_EVICTION_MS - 1);
+  assert.equal(b.offlineSince, undefined);
+  assert.equal(nextOfflineEviction(room), 200 + OFFLINE_EVICTION_MS);
+  reconcilePresence(room, new Set([a.id, b.id]), 200 + OFFLINE_EVICTION_MS);
+  assert.deepEqual(room.members.map(m => m.id), [a.id, b.id]);
+  assert.equal(joinRoom(room, 'b').id, b.id);
+});
+
+test('Expired disconnected seats are available to a new participant in a formerly full room', () => {
+  const room = emptyRoom();
+  const members = Array.from({ length: MAX_PARTICIPANTS }, (_, i) => joinRoom(room, `p${i}`));
+  reconcilePresence(room, new Set(members.slice(1).map(m => m.id)), 100);
+  assert.throws(() => joinRoom(room, 'new'), /ROOM_FULL/);
+  reconcilePresence(room, new Set(members.slice(1).map(m => m.id)), 100 + OFFLINE_EVICTION_MS);
+  assert.equal(room.members.length, MAX_PARTICIPANTS - 1);
+  assert.equal(joinRoom(room, 'new').slot, MAX_PARTICIPANTS + 1);
 });
 
 test('Names can be set, changed, reset and kept with the same room credential', () => {

@@ -1,12 +1,43 @@
 import { MAX_PARTICIPANTS, type Choice } from '../shared/protocol.ts';
 
 export interface Member {
-  id: string; token: string; slot: number; choice: Choice | null; name?: string;
+  id: string; token: string; slot: number; choice: Choice | null; name?: string; offlineSince?: number;
   push?: { endpoint: string; keys: { auth: string; p256dh: string }; expirationTime: number | null };
   appUrl?: string;
 }
 export interface RoomState { members: Member[]; nextSlot: number; revision: number; lastActivity: number }
 export const emptyRoom = (): RoomState => ({ members: [], nextSlot: 1, revision: 0, lastActivity: Date.now() });
+export const OFFLINE_EVICTION_MS = 10 * 60 * 1000;
+
+export function reconcilePresence(state: RoomState, onlineIds: Set<string>, now: number): boolean {
+  let changed = false;
+  const remaining: Member[] = [];
+  for (const member of state.members) {
+    if (onlineIds.has(member.id)) {
+      if (member.offlineSince !== undefined) { delete member.offlineSince; changed = true; }
+      remaining.push(member);
+    } else if (member.offlineSince === undefined) {
+      member.offlineSince = now;
+      changed = true;
+      remaining.push(member);
+    } else if (now - member.offlineSince >= OFFLINE_EVICTION_MS) {
+      changed = true;
+    } else {
+      remaining.push(member);
+    }
+  }
+  if (changed) {
+    state.members = remaining;
+    state.revision++;
+    state.lastActivity = now;
+  }
+  return changed;
+}
+
+export function nextOfflineEviction(state: RoomState): number | null {
+  const deadlines = state.members.flatMap(member => member.offlineSince === undefined ? [] : [member.offlineSince + OFFLINE_EVICTION_MS]);
+  return deadlines.length ? Math.min(...deadlines) : null;
+}
 
 export function joinRoom(state: RoomState, token: string): Member {
   const existing = state.members.find(m => m.token === token);

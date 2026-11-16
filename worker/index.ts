@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { buildPushPayload } from '@block65/webcrypto-web-push';
 import { MAX_PARTICIPANTS, memberLabel, ROOM_PATTERN, type ServerMessage } from '../shared/protocol';
-import { emptyRoom, joinRoom, setChoice, setName, validPushSubscription, type RoomState, type Member } from './state';
+import { emptyRoom, joinRoom, nextOfflineEviction, reconcilePresence, setChoice, setName, validPushSubscription, type RoomState, type Member } from './state';
 
 interface Env {
   ROOMS: DurableObjectNamespace<Room>;
@@ -75,9 +75,18 @@ export class Room extends DurableObject<Env> {
     if (close) ws.close(4000, code);
   }
   private async save() { await this.ctx.storage.put('room', this.room!); }
+  private async refreshPresence(now = Date.now()) {
+    if (!this.room) return false;
+    const onlineIds = new Set(this.activeSockets().map(ws => this.attachment(ws).memberId).filter((id): id is string => !!id));
+    if (!reconcilePresence(this.room, onlineIds, now)) return false;
+    await this.save();
+    return true;
+  }
   private async schedule() {
-    const next = this.ctx.getWebSockets().length ? Date.now() + CHECK_INTERVAL : (this.room?.lastActivity || Date.now()) + IDLE_EXPIRY;
-    await this.ctx.storage.setAlarm(next);
+    let next = this.ctx.getWebSockets().length ? Date.now() + CHECK_INTERVAL : (this.room?.lastActivity || Date.now()) + IDLE_EXPIRY;
+    const eviction = this.room && nextOfflineEviction(this.room);
+    if (eviction !== null && eviction !== undefined) next = Math.min(next, eviction);
+    await this.ctx.storage.setAlarm(Math.max(Date.now() + 1, next));
   }
   private broadcast() {
     if (!this.room) return;
@@ -119,6 +128,7 @@ export class Room extends DurableObject<Env> {
     if (data.type === 'hello') {
       if (attachment.memberId) return;
       if (typeof data.token !== 'string' || !/^[a-f0-9]{64}$/.test(data.token)) return this.fail(ws, 'BAD_TOKEN', '다시 접속해 주세요.', true);
+      if (await this.refreshPresence()) this.broadcast();
       let member: Member;
       try { member = joinRoom(this.room, data.token); }
       catch { return this.fail(ws, 'ROOM_FULL', `방이 가득 찼습니다. (${MAX_PARTICIPANTS}/${MAX_PARTICIPANTS})`, true); }
@@ -131,8 +141,10 @@ export class Room extends DurableObject<Env> {
       }
       ws.serializeAttachment({ memberId: member.id, lastSeen: Date.now(), visible: data.visible !== false } satisfies Attachment);
       this.room.lastActivity = Date.now();
+      reconcilePresence(this.room, new Set(this.activeSockets().map(socket => this.attachment(socket).memberId).filter((id): id is string => !!id)), Date.now());
       await this.save();
       this.broadcast();
+      await this.schedule();
       return;
     }
 
@@ -215,7 +227,10 @@ export class Room extends DurableObject<Env> {
   async webSocketClose(ws: WebSocket, code: number) {
     ws.close(code >= 1000 && code <= 4999 && ![1004, 1005, 1006, 1015].includes(code) ? code : 1000);
     ws.serializeAttachment({ lastSeen: 0, visible: false });
-    if (this.room) { this.room.lastActivity = Date.now(); await this.save(); }
+    if (this.room) {
+      this.room.lastActivity = Date.now();
+      if (!await this.refreshPresence()) await this.save();
+    }
     this.broadcast();
     await this.schedule();
   }
@@ -231,7 +246,10 @@ export class Room extends DurableObject<Env> {
         expiredSocket = true;
       }
     }
-    if (expiredSocket && this.room) { this.room.lastActivity = Date.now(); await this.save(); this.broadcast(); }
+    if (expiredSocket && this.room) this.room.lastActivity = Date.now();
+    const changed = await this.refreshPresence();
+    if (expiredSocket && this.room && !changed) await this.save();
+    if (expiredSocket || changed) this.broadcast();
     if (!this.activeSockets().length && this.room && Date.now() - this.room.lastActivity >= IDLE_EXPIRY) {
       this.room = undefined;
       await this.ctx.storage.deleteAll();

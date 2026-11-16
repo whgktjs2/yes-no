@@ -18,6 +18,7 @@ test('choices, optional names and disconnections stay in sync across four device
   const second = await participant(browser, url, { viewport: { width: 1024, height: 768 }, isMobile: true, hasTouch: true });
   const third = await participant(browser, url, { viewport: { width: 768, height: 1024 }, isMobile: true, hasTouch: true });
   const contexts = [second.context, third.context];
+  const peer = (slot: number) => page.locator('.peer').filter({ has: page.locator('.panel-label', { hasText: new RegExp(`^#${slot} `) }) });
   try {
     await expect(page.getByTestId('peer-status')).toHaveCount(2);
     await expect(page.locator('.connection-indicator')).toContainText('3/20');
@@ -34,7 +35,7 @@ test('choices, optional names and disconnections stay in sync across four device
     await expect(page.locator('.peer .panel-label').first()).toHaveText('#2 민지');
     await expect(page.locator('.peers-title')).toHaveCount(0);
     await third.page.getByRole('button', { name: 'YES', exact: true }).click();
-    await expect(page.getByTestId('peer-status').nth(1)).toHaveText('YES');
+    await expect(peer(3).getByTestId('peer-status')).toHaveText('YES');
     await expect(page.locator('.toast-stack')).toContainText('YES');
 
     await second.page.reload();
@@ -48,23 +49,48 @@ test('choices, optional names and disconnections stay in sync across four device
     const fourth = await participant(browser, url); contexts.push(fourth.context);
     await expect(page.getByTestId('peer-status')).toHaveCount(3);
     await expect(page.locator('.peers')).toHaveClass(/many-peers/);
-    await expect(page.locator('.peer .panel-label').nth(2)).toHaveText('#4 상대방');
+    await expect(peer(4).locator('.panel-label')).toHaveText('#4 상대방');
     await expect(page.locator('.connection-indicator')).toContainText('4/20');
     await second.context.setOffline(true);
-    await expect(page.getByTestId('peer-status').first()).toHaveText('연결 끊김');
+    await expect(peer(2).getByTestId('peer-status')).toHaveText('연결 끊김');
     await second.context.setOffline(false);
-    await expect(page.getByTestId('peer-status').first()).toHaveText('NO');
+    await expect(peer(2).getByTestId('peer-status')).toHaveText('NO');
 
     await second.page.locator('.edit-name').click();
     await second.page.locator('#display-name').fill('');
     await second.page.locator('.dialog-actions .primary-button').click();
     await expect(second.page.locator('.mine .panel-label')).toHaveText('#2 나');
-    await expect(page.locator('.peer .panel-label').first()).toHaveText('#2 상대방');
+    await expect(peer(2).locator('.panel-label')).toHaveText('#2 상대방');
     await second.page.locator('.toolbar .icon-button').last().click();
     await second.page.locator('.dialog-actions .primary-button').click();
     await expect(page.locator('.connection-indicator')).toContainText('3/20');
     expect(errors).toEqual([]);
   } finally { await Promise.all(contexts.map(c => c.close())); }
+});
+
+test('recent changes rise while a ten-second disconnection falls once', async ({ browser, page }) => {
+  await page.goto('/'); await page.locator('.create-button').click();
+  await expect(page.getByTestId('my-status')).toBeVisible();
+  const first = await participant(browser, page.url());
+  const second = await participant(browser, page.url());
+  const third = await participant(browser, page.url());
+  const labels = () => page.locator('.peer .panel-label').allTextContents();
+  try {
+    await expect.poll(labels).toEqual(['#2 상대방', '#3 상대방', '#4 상대방']);
+    await second.page.getByRole('button', { name: 'YES', exact: true }).click();
+    await expect.poll(labels).toEqual(['#3 상대방', '#2 상대방', '#4 상대방']);
+    await first.page.getByRole('button', { name: 'NO', exact: true }).click();
+    await expect.poll(labels).toEqual(['#2 상대방', '#3 상대방', '#4 상대방']);
+
+    await second.context.setOffline(true);
+    await expect(page.locator('.peer').nth(1).getByTestId('peer-status')).toHaveText('연결 끊김');
+    await expect.poll(labels, { timeout: 15_000 }).toEqual(['#2 상대방', '#4 상대방', '#3 상대방']);
+    await second.context.setOffline(false);
+    await expect(page.locator('.peer').nth(2).getByTestId('peer-status')).toHaveText('YES');
+    await expect.poll(labels).toEqual(['#2 상대방', '#4 상대방', '#3 상대방']);
+    await second.page.getByRole('button', { name: 'NO', exact: true }).click();
+    await expect.poll(labels).toEqual(['#3 상대방', '#2 상대방', '#4 상대방']);
+  } finally { await Promise.all([first.context.close(), second.context.close(), third.context.close()]); }
 });
 
 test('concurrent joins stop at twenty and the peer list scrolls', async ({ page }) => {
