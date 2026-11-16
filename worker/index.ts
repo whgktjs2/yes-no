@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { buildPushPayload } from '@block65/webcrypto-web-push';
-import { MAX_PARTICIPANTS, memberLabel, ROOM_PATTERN, type ServerMessage } from '../shared/protocol';
+import { currentMemberLabel, MAX_PARTICIPANTS, ROOM_PATTERN, type ServerMessage } from '../shared/protocol';
 import { emptyRoom, joinRoom, nextOfflineEviction, reconcilePresence, setChoice, setName, validPushSubscription, type RoomState, type Member } from './state';
 
 interface Env {
@@ -209,7 +209,7 @@ export class Room extends DurableObject<Env> {
     const members = [...this.room.members];
     await Promise.allSettled(members.filter(m => m.id !== sender.id && m.push && !visible.has(m.id)).map(async recipient => {
       const subscription = recipient.push!;
-      const label = memberLabel(sender, '상대방');
+      const label = currentMemberLabel(members, sender.id, '상대방');
       const payload = await buildPushPayload({ data: JSON.stringify({ title: 'YES / NO', body: `${label}의 상태가 ${sender.choice}로 변경되었습니다.`, eventId, url: recipient.appUrl }), options: { ttl: 60 } }, subscription, {
         subject: this.env.VAPID_SUBJECT!, publicKey: this.env.VAPID_PUBLIC_KEY!, privateKey: this.env.VAPID_PRIVATE_KEY!,
       });

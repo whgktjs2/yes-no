@@ -2,7 +2,7 @@ import { StrictMode, useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { API_URL, peerLabel, storageGet, storageRemove, storageSet, useRoom } from './connection';
 import { emptyPeerOrder, nextDemotionAt, reconcilePeerOrder } from './peer-order';
-import { formatRoom, MAX_PARTICIPANTS, memberLabel, normalizeRoom, ROOM_PATTERN, type MemberView } from '../shared/protocol';
+import { currentMemberLabel, formatRoom, MAX_PARTICIPANTS, normalizeRoom, ROOM_PATTERN, type MemberView } from '../shared/protocol';
 import './styles.css';
 
 function Icon({ name }: { name: 'copy' | 'bell' | 'exit' | 'arrow' | 'close' | 'edit' }) {
@@ -168,7 +168,7 @@ function App() {
       <div className="join-card"><div className="join-card-heading"><h2>함께 시작하기</h2><span>최대 {MAX_PARTICIPANTS}명</span></div>
         <button className="primary-button create-button" onClick={createRoom} disabled={busy}>{busy ? '방 만드는 중…' : '새 방 만들기'}<Icon name="arrow" /></button>
         <div className="divider"><span>초대받으셨나요?</span></div>
-        <form onSubmit={join}><label htmlFor="room-input">방 코드 또는 초대 링크</label><div className="input-row"><input id="room-input" value={input} onChange={e => setInput(e.target.value)} placeholder="방 코드를 입력하세요" autoComplete="off" spellCheck={false} /><button className="join-button" type="submit" aria-label="방 참여하기"><Icon name="arrow" /></button></div></form>
+        <form onSubmit={join}><label htmlFor="room-input">방 코드 또는 초대 링크</label><div className="input-row"><input id="room-input" type="text" inputMode="numeric" value={input} onChange={e => setInput(e.target.value)} placeholder="방 코드를 입력하세요" autoComplete="off" spellCheck={false} /><button className="join-button" type="submit" aria-label="방 참여하기"><Icon name="arrow" /></button></div></form>
         {formError && <p className="form-error" role="alert">{formError}</p>}
         <p className="card-footnote">가입 없이, 링크 하나로 연결돼요.</p>
       </div>
@@ -178,7 +178,7 @@ function App() {
         <div className={`peers ${peers.length > 2 ? 'many-peers' : peers.length > 1 ? 'two-peers' : ''}`} aria-label="상대방 영역">
           {peers.length ? peers.map(member => <StatusPanel key={member.id} member={member} label={peerLabel(snapshot!, member.id)} connected={online} />) : <StatusPanel label="상대방" connected={online} />}
         </div>
-        <StatusPanel member={self} label={self ? memberLabel(self, '나') : '나'} connected={online} mine onRename={() => { setNameInput(self?.name || ''); setDialog('name'); }}>
+        <StatusPanel member={self} label={self ? currentMemberLabel(snapshot!.members, self.id, '나') : '나'} connected={online} mine onRename={() => { setNameInput(self?.name || ''); setDialog('name'); }}>
           <div className="my-controls"><p>{pending ? '전달하는 중…' : online ? '나의 상태를 선택하세요' : '다시 연결되면 선택할 수 있어요'}</p><div className="choice-buttons">
             <button className="choice no-choice" onClick={() => connection.choose('NO')} disabled={!online || !!pending} aria-pressed={self?.choice === 'NO'}>NO</button>
             <button className="choice yes-choice" onClick={() => connection.choose('YES')} disabled={!online || !!pending} aria-pressed={self?.choice === 'YES'}>YES</button>

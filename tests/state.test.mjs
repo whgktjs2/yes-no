@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { OFFLINE_EVICTION_MS, emptyRoom, joinRoom, nextOfflineEviction, reconcilePresence, setChoice, setName, validPushSubscription } from '../worker/state.ts';
-import { MAX_PARTICIPANTS, ROOM_PATTERN, formatRoom, memberLabel, normalizeRoom } from '../shared/protocol.ts';
+import { MAX_PARTICIPANTS, ROOM_PATTERN, currentMemberLabel, formatRoom, memberLabel, normalizeRoom } from '../shared/protocol.ts';
 
 test('Only four digit room codes are accepted and displayed', () => {
   assert.equal(ROOM_PATTERN.test('4827'), true);
@@ -18,6 +18,19 @@ test('A display name replaces the default label while the join number stays visi
   assert.equal(memberLabel({ slot: 1 }, '나'), '#1 나');
   assert.equal(memberLabel({ slot: 1, name: 'dkd' }, '나'), '#1 dkd');
   assert.equal(memberLabel({ slot: 2, name: '고릴라' }, '상대방'), '#2 고릴라');
+});
+
+test('Display numbers follow the current members while keeping their original order', () => {
+  const members = [
+    { id: 'first', slot: 1 },
+    { id: 'second', slot: 16, name: '고릴라' },
+    { id: 'third', slot: 20 },
+  ];
+  assert.equal(currentMemberLabel(members, 'first', '나'), '#1 나');
+  assert.equal(currentMemberLabel(members, 'second', '상대방'), '#2 고릴라');
+  assert.equal(currentMemberLabel(members, 'third', '상대방'), '#3 상대방');
+  assert.equal(currentMemberLabel(members.slice(1), 'second', '나'), '#1 고릴라');
+  assert.equal(currentMemberLabel(members.slice(1), 'third', '상대방'), '#2 상대방');
 });
 
 test('A room has twenty slots; the same credential rejoins even when full', () => {

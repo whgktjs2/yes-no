@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { memberLabel, type Choice, type ServerMessage, type Snapshot } from '../shared/protocol';
+import { currentMemberLabel, type Choice, type ServerMessage, type Snapshot } from '../shared/protocol';
 
 export const API_URL = (import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://127.0.0.1:8787' : '')).replace(/\/$/, '');
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline' | 'error';
@@ -13,10 +13,7 @@ function tokenFor(room: string) {
   if (!token) { token = [...crypto.getRandomValues(new Uint8Array(32))].map(b => b.toString(16).padStart(2, '0')).join(''); storageSet(key, token); sessionTokens.set(key, token); }
   return token;
 }
-export const peerLabel = (snapshot: Snapshot, memberId: string) => {
-  const member = snapshot.members.find(m => m.id === memberId);
-  return member ? memberLabel(member, '상대방') : '상대방';
-};
+export const peerLabel = (snapshot: Snapshot, memberId: string) => currentMemberLabel(snapshot.members, memberId, '상대방');
 
 export function useRoom(room: string | null, notify: (text: string) => void) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);

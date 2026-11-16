@@ -64,6 +64,7 @@ test('choices, optional names and disconnections stay in sync across four device
     await second.page.locator('.toolbar .icon-button').last().click();
     await second.page.locator('.dialog-actions .primary-button').click();
     await expect(page.locator('.connection-indicator')).toContainText('3/20');
+    await expect(page.locator('.peer .panel-label')).toHaveText(['#2 상대방', '#3 상대방']);
     expect(errors).toEqual([]);
   } finally { await Promise.all(contexts.map(c => c.close())); }
 });
@@ -156,6 +157,7 @@ test('unknown rooms, invitation validation and small screens', async ({ page }) 
 
 test('new room uses a four digit code that another device can enter', async ({ browser, page }) => {
   await page.goto('/');
+  await expect(page.locator('#room-input')).toHaveAttribute('inputmode', 'numeric');
   await page.locator('.create-button').click();
   await expect(page.getByTestId('my-status')).toBeVisible();
   const code = new URLSearchParams(new URL(page.url()).hash.slice(1)).get('room');
