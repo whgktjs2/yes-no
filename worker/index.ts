@@ -205,9 +205,8 @@ export class Room extends DurableObject<Env> {
 
   private async notifyOthers(sender: Member, eventId: string) {
     if (!this.room || !pushEnabled(this.env)) return;
-    const visible = new Set(this.activeSockets().filter(ws => this.attachment(ws).visible).map(ws => this.attachment(ws).memberId));
     const members = [...this.room.members];
-    await Promise.allSettled(members.filter(m => m.id !== sender.id && m.push && !visible.has(m.id)).map(async recipient => {
+    await Promise.allSettled(members.filter(m => m.id !== sender.id && m.push).map(async recipient => {
       const subscription = recipient.push!;
       const label = currentMemberLabel(members, sender.id, '상대방');
       const payload = await buildPushPayload({ data: JSON.stringify({ title: 'YES / NO', body: `${label}의 상태가 ${sender.choice}로 변경되었습니다.`, eventId, url: recipient.appUrl }), options: { ttl: 60 } }, subscription, {
