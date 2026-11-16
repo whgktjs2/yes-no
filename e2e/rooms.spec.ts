@@ -33,6 +33,11 @@ test('choices, optional names and disconnections stay in sync across four device
     await second.page.locator('.dialog-actions .primary-button').click();
     await expect(second.page.locator('.mine .panel-label')).toHaveText('#2 민지');
     await expect(page.locator('.peer .panel-label').first()).toHaveText('#2 민지');
+    await expect(second.page.locator('.mine .status-name')).toHaveText('민지');
+    await expect(page.locator('.peer .status-name').first()).toHaveText('민지');
+    await second.page.locator('.mine .name-trigger').click();
+    await expect(second.page.locator('#display-name')).toHaveValue('민지');
+    await second.page.locator('.dialog-close').click();
     await expect(page.locator('.peers-title')).toHaveCount(0);
     await third.page.getByRole('button', { name: 'YES', exact: true }).click();
     await expect(peer(3).getByTestId('peer-status')).toHaveText('YES');
@@ -171,4 +176,26 @@ test('new room uses a four digit code that another device can enter', async ({ b
     await expect(other.page.locator('.room-code')).toContainText(code!);
     await expect(page.locator('.connection-indicator')).toContainText('2/20');
   } finally { await other.context.close(); }
+});
+
+test('a sixteen-character name fits inside the status panel on a phone screen', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.locator('.create-button').click();
+  await expect(page.getByTestId('my-status')).toBeVisible();
+  const name = '가'.repeat(16);
+  await page.locator('.mine .name-trigger').click();
+  await page.locator('#display-name').fill(name);
+  await page.locator('.dialog-actions .primary-button').click();
+  await page.getByRole('button', { name: 'YES', exact: true }).click();
+  await expect(page.locator('.mine .status-name')).toHaveText(name);
+  const fits = await page.locator('.mine').evaluate(panel => {
+    const nameBounds = panel.querySelector('.status-name')!.getBoundingClientRect();
+    const panelBounds = panel.getBoundingClientRect();
+    const controlsBounds = panel.querySelector('.my-controls')!.getBoundingClientRect();
+    return nameBounds.left >= panelBounds.left && nameBounds.right <= panelBounds.right &&
+      nameBounds.top >= panelBounds.top && nameBounds.bottom < controlsBounds.top;
+  });
+  expect(fits).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

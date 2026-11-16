@@ -31,9 +31,10 @@ function StatusPanel({ member, label, connected, mine = false, onRename, childre
   const available = connected && (mine || member?.online);
   const value = available ? member?.choice : null;
   const text = !connected ? (mine ? '연결 끊김' : '상태 확인 중') : !member ? '상대방 기다리는 중' : !available ? '연결 끊김' : value || '선택 전';
+  const displayName = member?.name || (mine ? '나' : '상대방');
   return <section className={`status-panel ${value?.toLowerCase() || 'neutral'} ${mine ? 'mine' : 'peer'}`} aria-label={`${label} 상태`}>
-    <div className="panel-top"><span className="panel-label">{label}</span><span className="panel-actions">{mine && <button className="edit-name" type="button" onClick={onRename} disabled={!connected} aria-label="내 이름 변경" title="내 이름 변경"><Icon name="edit" /></button>}<span className={`status-dot ${available && member ? 'on' : ''}`} aria-label={available && member ? '연결됨' : '연결 안 됨'} /></span></div>
-    <div className={`status-value ${!value ? 'status-text' : ''}`} data-testid={mine ? 'my-status' : 'peer-status'}>{text}</div>
+    <div className="panel-top">{mine ? <button className="panel-label name-trigger" type="button" onClick={onRename} disabled={!connected} aria-label={`${label} 이름 변경`} title="내 이름 변경">{label}</button> : <span className="panel-label">{label}</span>}<span className="panel-actions">{mine && <button className="edit-name" type="button" onClick={onRename} disabled={!connected} aria-label="내 이름 변경" title="내 이름 변경"><Icon name="edit" /></button>}<span className={`status-dot ${available && member ? 'on' : ''}`} aria-label={available && member ? '연결됨' : '연결 안 됨'} /></span></div>
+    {value ? <div className="status-center"><strong className={`status-name ${[...displayName].length > 5 ? 'long-name' : ''}`}>{displayName}</strong><span className="status-choice" data-testid={mine ? 'my-status' : 'peer-status'}>{value}</span></div> : <div className="status-value status-text" data-testid={mine ? 'my-status' : 'peer-status'}>{text}</div>}
     {children}
   </section>;
 }
