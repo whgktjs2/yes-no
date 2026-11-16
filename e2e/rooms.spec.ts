@@ -24,9 +24,9 @@ test('choices, optional names and disconnections stay in sync across four device
     await expect(page.locator('.connection-indicator')).toContainText('3/20');
     await expect(page.locator('.mine .panel-label')).toHaveText('#1 나');
     await page.getByRole('button', { name: 'YES', exact: true }).click();
-    await expect(second.page.getByTestId('peer-status').first()).toHaveText('YES');
+    await expect(second.page.getByTestId('peer-status').first()).toHaveAttribute('data-choice', 'YES');
     await second.page.getByRole('button', { name: 'NO', exact: true }).click();
-    await expect(page.getByTestId('peer-status').first()).toHaveText('NO');
+    await expect(page.getByTestId('peer-status').first()).toHaveAttribute('data-choice', 'NO');
 
     await second.page.locator('.edit-name').click();
     await second.page.locator('#display-name').fill('민지');
@@ -40,12 +40,12 @@ test('choices, optional names and disconnections stay in sync across four device
     await second.page.locator('.dialog-close').click();
     await expect(page.locator('.peers-title')).toHaveCount(0);
     await third.page.getByRole('button', { name: 'YES', exact: true }).click();
-    await expect(peer(3).getByTestId('peer-status')).toHaveText('YES');
+    await expect(peer(3).getByTestId('peer-status')).toHaveAttribute('data-choice', 'YES');
     await expect(page.locator('.toast-stack')).toContainText('YES');
 
     await second.page.reload();
     await expect(second.page.locator('.mine .panel-label')).toHaveText('#2 민지');
-    await expect(second.page.getByTestId('my-status')).toHaveText('NO');
+    await expect(second.page.getByTestId('my-status')).toHaveAttribute('data-choice', 'NO');
     await page.screenshot({ path: 'test-results/room-desktop.png', fullPage: true });
     await third.page.screenshot({ path: 'test-results/room-ipad-portrait.png', fullPage: true });
     const dimensions = await third.page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth }));
@@ -59,7 +59,7 @@ test('choices, optional names and disconnections stay in sync across four device
     await second.context.setOffline(true);
     await expect(peer(2).getByTestId('peer-status')).toHaveText('연결 끊김');
     await second.context.setOffline(false);
-    await expect(peer(2).getByTestId('peer-status')).toHaveText('NO');
+    await expect(peer(2).getByTestId('peer-status')).toHaveAttribute('data-choice', 'NO');
 
     await second.page.locator('.edit-name').click();
     await second.page.locator('#display-name').fill('');
@@ -92,7 +92,7 @@ test('recent changes rise while a ten-second disconnection falls once', async ({
     await expect(page.locator('.peer').nth(1).getByTestId('peer-status')).toHaveText('연결 끊김');
     await expect.poll(labels, { timeout: 15_000 }).toEqual(['#2 상대방', '#4 상대방', '#3 상대방']);
     await second.context.setOffline(false);
-    await expect(page.locator('.peer').nth(2).getByTestId('peer-status')).toHaveText('YES');
+    await expect(page.locator('.peer').nth(2).getByTestId('peer-status')).toHaveAttribute('data-choice', 'YES');
     await expect.poll(labels).toEqual(['#2 상대방', '#4 상대방', '#3 상대방']);
     await second.page.getByRole('button', { name: 'NO', exact: true }).click();
     await expect.poll(labels).toEqual(['#3 상대방', '#2 상대방', '#4 상대방']);
