@@ -19,11 +19,13 @@
 .edit-name{display:grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid #15201466;border-radius:50%;background:#ffffff38}
 .edit-name:hover:not(:disabled){background:#ffffff80}
 .edit-name svg{width:16px;height:16px}
-.peers:not(.two-peers):not(.many-peers):has(.peers-title) .peer .panel-top{top:54px}
 .many-peers{display:flex;flex-direction:column;gap:2px;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
 .many-peers .peer{flex:0 0 160px}
 .many-peers .peer:first-of-type .panel-top{top:54px}
 .many-peers .panel-label{font-size:12px}
 .many-peers .status-value{font-size:76px;letter-spacing:-3px}
 .many-peers .status-value.status-text{font-size:20px;letter-spacing:-.5px}
-@media(max-width:700px){.panel-actions{gap:6px}.edit-name{width:26px;height:26px}.peers:not(.two-peers):not(.many-peers):has(.peers-title) .peer .panel-top,.many-peers .peer:first-of-type .panel-top{top:45px}.many-peers .peer{flex-basis:132px}.many-peers .panel-label{font-size:10px}.many-peers .status-value{font-size:46px;letter-spacing:-2px}.many-peers .status-value.status-text{font-size:14px}}
+@media(max-width:700px){.panel-actions{gap:6px}.edit-name{width:26px;height:26px}.many-peers .peer{flex-basis:132px}.many-peers .panel-label{font-size:10px}.many-peers .status-value{font-size:46px;letter-spacing:-2px}.many-peers .status-value.status-text{font-size:14px}}
+.two-peers .peer:first-of-type .panel-top,.many-peers .peer:first-of-type .panel-top{top:25px}
+@media(max-width:700px){.two-peers .peer:first-of-type .panel-top,.many-peers .peer:first-of-type .panel-top{top:18px}}
+@media(max-height:600px) and (min-width:701px){.two-peers .peer:first-of-type .panel-top,.many-peers .peer:first-of-type .panel-top{top:17px}}

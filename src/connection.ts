@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Choice, ServerMessage, Snapshot } from '../shared/protocol';
+import { memberLabel, type Choice, type ServerMessage, type Snapshot } from '../shared/protocol';
 
 export const API_URL = (import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://127.0.0.1:8787' : '')).replace(/\/$/, '');
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline' | 'error';
@@ -14,8 +14,8 @@ function tokenFor(room: string) {
   return token;
 }
 export const peerLabel = (snapshot: Snapshot, memberId: string) => {
-  const peers = snapshot.members.filter(m => m.id !== snapshot.selfId).sort((a, b) => a.slot - b.slot);
-  return peers.find(m => m.id === memberId)?.name || (peers.length > 1 ? `상대방 ${peers.findIndex(m => m.id === memberId) + 1}` : '상대방');
+  const member = snapshot.members.find(m => m.id === memberId);
+  return member ? memberLabel(member, '상대방') : '상대방';
 };
 
 export function useRoom(room: string | null, notify: (text: string) => void) {

@@ -21,6 +21,7 @@ test('choices, optional names and disconnections stay in sync across four device
   try {
     await expect(page.getByTestId('peer-status')).toHaveCount(2);
     await expect(page.locator('.connection-indicator')).toContainText('3/20');
+    await expect(page.locator('.mine .panel-label')).toHaveText('#1 나');
     await page.getByRole('button', { name: 'YES', exact: true }).click();
     await expect(second.page.getByTestId('peer-status').first()).toHaveText('YES');
     await second.page.getByRole('button', { name: 'NO', exact: true }).click();
@@ -29,14 +30,15 @@ test('choices, optional names and disconnections stay in sync across four device
     await second.page.locator('.edit-name').click();
     await second.page.locator('#display-name').fill('민지');
     await second.page.locator('.dialog-actions .primary-button').click();
-    await expect(second.page.locator('.mine .panel-label')).toContainText('민지');
-    await expect(page.locator('.peer .panel-label').first()).toHaveText('민지');
+    await expect(second.page.locator('.mine .panel-label')).toHaveText('#2 민지');
+    await expect(page.locator('.peer .panel-label').first()).toHaveText('#2 민지');
+    await expect(page.locator('.peers-title')).toHaveCount(0);
     await third.page.getByRole('button', { name: 'YES', exact: true }).click();
     await expect(page.getByTestId('peer-status').nth(1)).toHaveText('YES');
     await expect(page.locator('.toast-stack')).toContainText('YES');
 
     await second.page.reload();
-    await expect(second.page.locator('.mine .panel-label')).toContainText('민지');
+    await expect(second.page.locator('.mine .panel-label')).toHaveText('#2 민지');
     await expect(second.page.getByTestId('my-status')).toHaveText('NO');
     await page.screenshot({ path: 'test-results/room-desktop.png', fullPage: true });
     await third.page.screenshot({ path: 'test-results/room-ipad-portrait.png', fullPage: true });
@@ -46,6 +48,7 @@ test('choices, optional names and disconnections stay in sync across four device
     const fourth = await participant(browser, url); contexts.push(fourth.context);
     await expect(page.getByTestId('peer-status')).toHaveCount(3);
     await expect(page.locator('.peers')).toHaveClass(/many-peers/);
+    await expect(page.locator('.peer .panel-label').nth(2)).toHaveText('#4 상대방');
     await expect(page.locator('.connection-indicator')).toContainText('4/20');
     await second.context.setOffline(true);
     await expect(page.getByTestId('peer-status').first()).toHaveText('연결 끊김');
@@ -55,8 +58,8 @@ test('choices, optional names and disconnections stay in sync across four device
     await second.page.locator('.edit-name').click();
     await second.page.locator('#display-name').fill('');
     await second.page.locator('.dialog-actions .primary-button').click();
-    await expect(second.page.locator('.mine .panel-label')).toHaveText('나');
-    await expect(page.locator('.peer .panel-label').first()).toHaveText('상대방 1');
+    await expect(second.page.locator('.mine .panel-label')).toHaveText('#2 나');
+    await expect(page.locator('.peer .panel-label').first()).toHaveText('#2 상대방');
     await second.page.locator('.toolbar .icon-button').last().click();
     await second.page.locator('.dialog-actions .primary-button').click();
     await expect(page.locator('.connection-indicator')).toContainText('3/20');

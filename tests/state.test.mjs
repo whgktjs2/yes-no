@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { emptyRoom, joinRoom, setChoice, setName, validPushSubscription } from '../worker/state.ts';
-import { MAX_PARTICIPANTS, ROOM_PATTERN, formatRoom, normalizeRoom } from '../shared/protocol.ts';
+import { MAX_PARTICIPANTS, ROOM_PATTERN, formatRoom, memberLabel, normalizeRoom } from '../shared/protocol.ts';
 
 test('Only four digit room codes are accepted and displayed', () => {
   assert.equal(ROOM_PATTERN.test('4827'), true);
@@ -12,6 +12,12 @@ test('Only four digit room codes are accepted and displayed', () => {
   assert.equal(ROOM_PATTERN.test('12A4'), false);
   assert.equal(normalizeRoom(' 4827 '), '4827');
   assert.equal(formatRoom('4827'), '4827');
+});
+
+test('A display name replaces the default label while the join number stays visible', () => {
+  assert.equal(memberLabel({ slot: 1 }, '나'), '#1 나');
+  assert.equal(memberLabel({ slot: 1, name: 'dkd' }, '나'), '#1 dkd');
+  assert.equal(memberLabel({ slot: 2, name: '고릴라' }, '상대방'), '#2 고릴라');
 });
 
 test('A room has twenty slots; the same credential rejoins even when full', () => {

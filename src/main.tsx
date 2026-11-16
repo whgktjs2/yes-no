@@ -1,7 +1,7 @@
 import { StrictMode, useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { API_URL, peerLabel, storageGet, storageRemove, storageSet, useRoom } from './connection';
-import { formatRoom, MAX_PARTICIPANTS, normalizeRoom, ROOM_PATTERN, type MemberView } from '../shared/protocol';
+import { formatRoom, MAX_PARTICIPANTS, memberLabel, normalizeRoom, ROOM_PATTERN, type MemberView } from '../shared/protocol';
 import './styles.css';
 
 function Icon({ name }: { name: 'copy' | 'bell' | 'exit' | 'arrow' | 'close' | 'edit' }) {
@@ -161,10 +161,9 @@ function App() {
     </div> : error || !API_URL ? <div className="connection-card"><span className="eyebrow">잠시 확인해 주세요</span><h1>{error || '연결 설정이 필요합니다.'}</h1><p>{!API_URL ? 'README의 안내에 따라 서버 주소를 설정해 주세요.' : '방 코드와 연결 상태를 확인한 뒤 다시 시도해 주세요.'}</p><div className="dialog-actions"><button className="secondary-button" onClick={leave}>시작 화면으로</button><button className="primary-button" onClick={connection.retry}>다시 연결</button></div></div> : <>
       <div className="board" aria-busy={!snapshot}>
         <div className={`peers ${peers.length > 2 ? 'many-peers' : peers.length > 1 ? 'two-peers' : ''}`} aria-label="상대방 영역">
-          {(peers.length > 1 || peers[0]?.name) && <span className="peers-title">상대방</span>}
           {peers.length ? peers.map(member => <StatusPanel key={member.id} member={member} label={peerLabel(snapshot!, member.id)} connected={online} />) : <StatusPanel label="상대방" connected={online} />}
         </div>
-        <StatusPanel member={self} label={self?.name ? `나 · ${self.name}` : '나'} connected={online} mine onRename={() => { setNameInput(self?.name || ''); setDialog('name'); }}>
+        <StatusPanel member={self} label={self ? memberLabel(self, '나') : '나'} connected={online} mine onRename={() => { setNameInput(self?.name || ''); setDialog('name'); }}>
           <div className="my-controls"><p>{pending ? '전달하는 중…' : online ? '나의 상태를 선택하세요' : '다시 연결되면 선택할 수 있어요'}</p><div className="choice-buttons">
             <button className="choice no-choice" onClick={() => connection.choose('NO')} disabled={!online || !!pending} aria-pressed={self?.choice === 'NO'}>NO</button>
             <button className="choice yes-choice" onClick={() => connection.choose('YES')} disabled={!online || !!pending} aria-pressed={self?.choice === 'YES'}>YES</button>
