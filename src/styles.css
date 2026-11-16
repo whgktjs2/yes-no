@@ -14,6 +14,7 @@
 
 /* Keep the original split view while allowing larger rooms to scroll on the left. */
 .panel-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dialog form label{display:block;margin:0 0 8px;font-size:13px;font-weight:600;color:#62675d}
 .panel-actions{display:flex;align-items:center;gap:12px;flex-shrink:0}
 .edit-name{display:grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid #15201466;border-radius:50%;background:#ffffff38}
 .edit-name:hover:not(:disabled){background:#ffffff80}
