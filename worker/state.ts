@@ -1,7 +1,7 @@
-import type { Choice } from '../shared/protocol';
+import { MAX_PARTICIPANTS, type Choice } from '../shared/protocol.ts';
 
 export interface Member {
-  id: string; token: string; slot: number; choice: Choice | null;
+  id: string; token: string; slot: number; choice: Choice | null; name?: string;
   push?: { endpoint: string; keys: { auth: string; p256dh: string }; expirationTime: number | null };
   appUrl?: string;
 }
@@ -11,7 +11,7 @@ export const emptyRoom = (): RoomState => ({ members: [], nextSlot: 1, revision:
 export function joinRoom(state: RoomState, token: string): Member {
   const existing = state.members.find(m => m.token === token);
   if (existing) return existing;
-  if (state.members.length >= 3) throw new Error('ROOM_FULL');
+  if (state.members.length >= MAX_PARTICIPANTS) throw new Error('ROOM_FULL');
   const member: Member = { id: crypto.randomUUID(), token, slot: state.nextSlot++, choice: null };
   state.members.push(member);
   state.revision++;
@@ -24,6 +24,21 @@ export function setChoice(state: RoomState, id: string, choice: unknown): boolea
   if (!member) throw new Error('UNAUTHORIZED');
   if (member.choice === choice) return false;
   member.choice = choice as Choice;
+  state.revision++;
+  state.lastActivity = Date.now();
+  return true;
+}
+
+export function setName(state: RoomState, id: string, input: unknown): boolean {
+  if (typeof input !== 'string') throw new Error('INVALID_NAME');
+  const name = input.trim();
+  if ([...name].length > 16 || /[\u0000-\u001f\u007f<>]/u.test(name)) throw new Error('INVALID_NAME');
+  const member = state.members.find(m => m.id === id);
+  if (!member) throw new Error('UNAUTHORIZED');
+  if ((member.name || '') === name) return false;
+  if (name && state.members.some(m => m.id !== id && m.name?.toLocaleLowerCase() === name.toLocaleLowerCase())) throw new Error('NAME_TAKEN');
+  if (name) member.name = name;
+  else delete member.name;
   state.revision++;
   state.lastActivity = Date.now();
   return true;

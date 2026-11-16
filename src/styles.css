@@ -11,3 +11,18 @@
 @media(max-width:700px){.lobby{padding:0 24px}.lobby .app-header{height:77px}.lobby-content{display:flex;flex-direction:column;padding-top:36px}.intro h1{font-size:45px;letter-spacing:-2px;margin-top:20px}.intro p{font-size:13px}.lobby-sample{margin:27px 0 35px;max-height:175px;min-height:130px}.join-card{max-width:none;padding:26px;margin-bottom:35px}.lobby-foot{font-size:9px}.header-note{font-size:10px}.in-room{padding:0 10px;min-height:430px}.in-room .app-header{height:94px;gap:10px;flex-wrap:wrap;padding:12px 2px}.in-room .wordmark{font-size:19px}.toolbar{margin-left:auto}.connection-indicator{font-size:10px}.icon-button{width:33px;height:33px}.room-code{order:3;width:100%;justify-content:center;padding:0;font-size:10px;letter-spacing:1px}.panel-top{top:18px;left:16px;right:16px}.panel-label,.peers-title{font-size:12px}.peers-title{top:18px;left:16px}.two-peers .peer:first-of-type .panel-top{top:45px}.two-peers .panel-label{font-size:10px}.status-value{font-size:18vw;letter-spacing:-3px}.two-peers .status-value{font-size:15vw;letter-spacing:-2px}.my-controls{bottom:24px;left:7px;right:7px;gap:12px}.my-controls p{font-size:9px}.choice{min-width:60px;font-size:12px;min-height:44px;padding:10px 15px}.choice-buttons{gap:6px}.room-footer{font-size:9px;min-height:46px}.room-footer button{font-size:9px}.status-text,.two-peers .status-value.status-text{font-size:17px;letter-spacing:-.6px;padding:12px}.toast{font-size:11px;padding:13px 16px}.dialog{padding:35px 24px 26px}}
 @media(max-height:600px) and (min-width:701px){.in-room .app-header{height:58px}.my-controls{bottom:17px;gap:7px}.panel-top{top:17px}.status-value{font-size:100px}.two-peers .status-value{font-size:70px}.peers-title{top:17px}.two-peers .peer:first-of-type .panel-top{top:42px}.room-footer{min-height:38px}.status-text,.two-peers .status-value.status-text{font-size:21px}.lobby-content{padding-top:30px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+
+/* Keep the original split view while allowing larger rooms to scroll on the left. */
+.panel-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.panel-actions{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.edit-name{display:grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid #15201466;border-radius:50%;background:#ffffff38}
+.edit-name:hover:not(:disabled){background:#ffffff80}
+.edit-name svg{width:16px;height:16px}
+.peers:not(.two-peers):not(.many-peers):has(.peers-title) .peer .panel-top{top:54px}
+.many-peers{display:flex;flex-direction:column;gap:2px;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.many-peers .peer{flex:0 0 160px}
+.many-peers .peer:first-of-type .panel-top{top:54px}
+.many-peers .panel-label{font-size:12px}
+.many-peers .status-value{font-size:76px;letter-spacing:-3px}
+.many-peers .status-value.status-text{font-size:20px;letter-spacing:-.5px}
+@media(max-width:700px){.panel-actions{gap:6px}.edit-name{width:26px;height:26px}.peers:not(.two-peers):not(.many-peers):has(.peers-title) .peer .panel-top,.many-peers .peer:first-of-type .panel-top{top:45px}.many-peers .peer{flex-basis:132px}.many-peers .panel-label{font-size:10px}.many-peers .status-value{font-size:46px;letter-spacing:-2px}.many-peers .status-value.status-text{font-size:14px}}

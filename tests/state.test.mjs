@@ -1,14 +1,42 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyRoom, joinRoom, setChoice, validPushSubscription } from '../worker/state.ts';
+import { emptyRoom, joinRoom, setChoice, setName, validPushSubscription } from '../worker/state.ts';
+import { MAX_PARTICIPANTS, ROOM_PATTERN, formatRoom, normalizeRoom } from '../shared/protocol.ts';
 
-test('A room has three slots; the same credential rejoins even when full', () => {
+test('Only four digit room codes are accepted and displayed', () => {
+  assert.equal(ROOM_PATTERN.test('4827'), true);
+  assert.equal(ROOM_PATTERN.test('0000'), true);
+  assert.equal(ROOM_PATTERN.test('ABCD1234ABCD1234'), false);
+  assert.equal(ROOM_PATTERN.test('123'), false);
+  assert.equal(ROOM_PATTERN.test('12345'), false);
+  assert.equal(ROOM_PATTERN.test('12A4'), false);
+  assert.equal(normalizeRoom(' 4827 '), '4827');
+  assert.equal(formatRoom('4827'), '4827');
+});
+
+test('A room has twenty slots; the same credential rejoins even when full', () => {
   const room = emptyRoom();
   const first = joinRoom(room, 'first');
-  joinRoom(room, 'second'); joinRoom(room, 'third');
-  assert.throws(() => joinRoom(room, 'fourth'), /ROOM_FULL/);
+  for (let i = 1; i < MAX_PARTICIPANTS; i++) joinRoom(room, `participant-${i}`);
+  assert.throws(() => joinRoom(room, 'extra'), /ROOM_FULL/);
   assert.equal(joinRoom(room, 'first').id, first.id);
-  assert.equal(room.members.length, 3);
+  assert.equal(room.members.length, MAX_PARTICIPANTS);
+});
+
+test('Names can be set, changed, reset and kept with the same room credential', () => {
+  const room = emptyRoom(), a = joinRoom(room, 'a'), b = joinRoom(room, 'b');
+  assert.equal(setName(room, a.id, '  민지  '), true);
+  assert.equal(a.name, '민지');
+  const revision = room.revision;
+  assert.equal(setName(room, a.id, '민지'), false);
+  assert.equal(room.revision, revision);
+  assert.equal(joinRoom(room, 'a').name, '민지');
+  assert.throws(() => setName(room, b.id, '민지'), /NAME_TAKEN/);
+  assert.throws(() => setName(room, b.id, 'x'.repeat(17)), /INVALID_NAME/);
+  assert.throws(() => setName(room, b.id, '<script>'), /INVALID_NAME/);
+  assert.throws(() => setName(room, 'missing', '민수'), /UNAUTHORIZED/);
+  assert.equal(setName(room, a.id, ''), true);
+  assert.equal(a.name, undefined);
 });
 test('Changes affect only the authenticated participant and duplicate selections do not create events', () => {
   const room = emptyRoom(), a = joinRoom(room, 'a'), b = joinRoom(room, 'b');

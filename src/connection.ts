@@ -15,7 +15,7 @@ function tokenFor(room: string) {
 }
 export const peerLabel = (snapshot: Snapshot, memberId: string) => {
   const peers = snapshot.members.filter(m => m.id !== snapshot.selfId).sort((a, b) => a.slot - b.slot);
-  return peers.length > 1 ? `상대방 ${peers.findIndex(m => m.id === memberId) + 1}` : '상대방';
+  return peers.find(m => m.id === memberId)?.name || (peers.length > 1 ? `상대방 ${peers.findIndex(m => m.id === memberId) + 1}` : '상대방');
 };
 
 export function useRoom(room: string | null, notify: (text: string) => void) {

@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { buildPushPayload } from '@block65/webcrypto-web-push';
-import { ROOM_PATTERN, type ServerMessage } from '../shared/protocol';
-import { emptyRoom, joinRoom, setChoice, validPushSubscription, type RoomState, type Member } from './state';
+import { MAX_PARTICIPANTS, ROOM_PATTERN, type ServerMessage } from '../shared/protocol';
+import { emptyRoom, joinRoom, setChoice, setName, validPushSubscription, type RoomState, type Member } from './state';
 
 interface Env {
   ROOMS: DurableObjectNamespace<Room>;
@@ -33,12 +33,18 @@ export default {
     if (url.pathname === '/api/config' && request.method === 'GET') {
       response = json({ pushPublicKey: pushEnabled(env) ? env.VAPID_PUBLIC_KEY : null });
     } else if (url.pathname === '/api/rooms' && request.method === 'POST') {
-      const code = [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
-      const stub = env.ROOMS.get(env.ROOMS.idFromName(code));
-      await stub.fetch(new Request('https://room.internal/init', { method: 'POST' }));
-      response = json({ code }, 201);
+      response = json({ error: '빈 방 코드를 찾지 못했습니다. 잠시 후 다시 시도해 주세요.' }, 503);
+      for (let attempt = 0; attempt < 32; attempt++) {
+        const code = String(1000 + (crypto.getRandomValues(new Uint16Array(1))[0] % 9000));
+        const stub = env.ROOMS.get(env.ROOMS.idFromName(code));
+        const result = await stub.fetch(new Request('https://room.internal/init', { method: 'POST' }));
+        if (result.status === 409) continue;
+        if (!result.ok) throw new Error('ROOM_INIT_FAILED');
+        response = json({ code }, 201);
+        break;
+      }
     } else {
-      const match = url.pathname.match(/^\/api\/rooms\/([A-F0-9]{16})\/socket$/);
+      const match = url.pathname.match(/^\/api\/rooms\/(\d{4})\/socket$/);
       if (!match || !ROOM_PATTERN.test(match[1]) || request.method !== 'GET') response = json({ error: '주소를 찾을 수 없습니다.' }, 404);
       else if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') response = json({ error: 'WebSocket 연결이 필요합니다.' }, 426);
       else return env.ROOMS.get(env.ROOMS.idFromName(match[1])).fetch(request);
@@ -77,7 +83,7 @@ export class Room extends DurableObject<Env> {
     if (!this.room) return;
     const sockets = this.activeSockets();
     const online = new Set(sockets.map(ws => this.attachment(ws).memberId));
-    const members = this.room.members.map(({ id, slot, choice }) => ({ id, slot, choice, online: online.has(id) }));
+    const members = this.room.members.map(({ id, slot, choice, name }) => ({ id, slot, choice, name, online: online.has(id) }));
     for (const ws of sockets) {
       const selfId = this.attachment(ws).memberId;
       if (selfId) this.send(ws, { type: 'snapshot', selfId, members, revision: this.room.revision });
@@ -86,7 +92,8 @@ export class Room extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     if (new URL(request.url).pathname === '/init' && request.method === 'POST') {
-      if (!this.room) { this.room = emptyRoom(); await this.save(); await this.schedule(); }
+      if (this.room) return json({ error: 'ROOM_EXISTS' }, 409);
+      this.room = emptyRoom(); await this.save(); await this.schedule();
       return json({ ok: true });
     }
     const pair = new WebSocketPair();
@@ -94,7 +101,7 @@ export class Room extends DurableObject<Env> {
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({ lastSeen: Date.now(), visible: true } satisfies Attachment);
     if (!this.room) this.fail(server, 'ROOM_NOT_FOUND', '방을 찾을 수 없거나 만료되었습니다.', true);
-    else if (this.ctx.getWebSockets().length > 12) this.fail(server, 'TOO_MANY_CONNECTIONS', '잠시 후 다시 연결해 주세요.', true);
+    else if (this.ctx.getWebSockets().length > MAX_PARTICIPANTS * 3) this.fail(server, 'TOO_MANY_CONNECTIONS', '잠시 후 다시 연결해 주세요.', true);
     await this.schedule();
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -114,7 +121,7 @@ export class Room extends DurableObject<Env> {
       if (typeof data.token !== 'string' || !/^[a-f0-9]{64}$/.test(data.token)) return this.fail(ws, 'BAD_TOKEN', '다시 접속해 주세요.', true);
       let member: Member;
       try { member = joinRoom(this.room, data.token); }
-      catch { return this.fail(ws, 'ROOM_FULL', '방이 가득 찼습니다. (3/3)', true); }
+      catch { return this.fail(ws, 'ROOM_FULL', `방이 가득 찼습니다. (${MAX_PARTICIPANTS}/${MAX_PARTICIPANTS})`, true); }
       // Detach superseded sockets first so their later close events cannot hide the new connection.
       for (const other of this.ctx.getWebSockets()) {
         if (other !== ws && this.attachment(other).memberId === member.id) {
@@ -135,6 +142,12 @@ export class Room extends DurableObject<Env> {
       if (typeof data.visible === 'boolean') attachment.visible = data.visible;
       ws.serializeAttachment(attachment);
       this.send(ws, { type: 'pong' });
+    } else if (data.type === 'rename') {
+      try {
+        if (setName(this.room, member.id, data.name)) { await this.save(); this.broadcast(); }
+      } catch (error) {
+        this.fail(ws, 'INVALID_NAME', error instanceof Error && error.message === 'NAME_TAKEN' ? '이미 사용 중인 이름입니다.' : '이름은 16자 이내로 입력해 주세요.');
+      }
     } else if (data.type === 'choice') {
       if (data.choice !== 'YES' && data.choice !== 'NO') return this.fail(ws, 'INVALID_CHOICE', 'YES 또는 NO를 선택해 주세요.');
       if (Date.now() - (attachment.lastChange || 0) < 150) return this.fail(ws, 'RATE_LIMITED', '잠시 후 다시 선택해 주세요.');
@@ -185,7 +198,7 @@ export class Room extends DurableObject<Env> {
     await Promise.allSettled(members.filter(m => m.id !== sender.id && m.push && !visible.has(m.id)).map(async recipient => {
       const subscription = recipient.push!;
       const others = members.filter(m => m.id !== recipient.id).sort((a, b) => a.slot - b.slot);
-      const label = others.length > 1 ? `상대방 ${others.findIndex(m => m.id === sender.id) + 1}` : '상대방';
+      const label = sender.name || (others.length > 1 ? `상대방 ${others.findIndex(m => m.id === sender.id) + 1}` : '상대방');
       const payload = await buildPushPayload({ data: JSON.stringify({ title: 'YES / NO', body: `${label}의 상태가 ${sender.choice}로 변경되었습니다.`, eventId, url: recipient.appUrl }), options: { ttl: 60 } }, subscription, {
         subject: this.env.VAPID_SUBJECT!, publicKey: this.env.VAPID_PUBLIC_KEY!, privateKey: this.env.VAPID_PRIVATE_KEY!,
       });
