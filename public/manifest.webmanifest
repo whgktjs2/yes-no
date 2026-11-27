@@ -1,6 +1,5 @@
 {
-  "id": "./", "name": "YES / NO — 함께 확인하는 지금", "short_name": "YES / NO",
-  "description": "최대 세 명이 함께 확인하는 실시간 YES / NO",
+  "id": "./", "name": "YES / NO", "short_name": "YES / NO",
   "lang": "ko", "start_url": "./", "scope": "./", "display": "standalone",
   "background_color": "#f5f4f0", "theme_color": "#f5f4f0",
   "icons": [
