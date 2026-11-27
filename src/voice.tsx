@@ -5,6 +5,16 @@ import { API_URL, tokenFor } from './connection';
 
 type Meeting = Awaited<ReturnType<typeof RealtimeKitClient.init>>;
 
+function VoiceIcon({ name }: { name: 'mic' | 'micOff' | 'leave' | 'headset' }) {
+  const paths = {
+    mic: <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6" /></>,
+    micOff: <><path d="m4 4 16 16M9.2 5.2A3 3 0 0 1 15 6v5c0 .5-.1 1-.3 1.4M6 11a6 6 0 0 0 10.5 4M12 18v3M9 21h6" /></>,
+    leave: <><path d="M14 5h5v14h-5M10 8l-4 4 4 4M6 12h10" /></>,
+    headset: <><path d="M4 13v-2a8 8 0 0 1 16 0v2M4 13h3v6H5a1 1 0 0 1-1-1v-5ZM20 13h-3v6h2a1 1 0 0 0 1-1v-5Z" /></>,
+  };
+  return <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+}
+
 export function VoiceControls({ room, connected, enabled, selfId, send, onSpeakingChange }: {
   room: string; connected: boolean; enabled: boolean; selfId: string | null;
   send: (message: unknown) => boolean; onSpeakingChange: (ids: Set<string>) => void;
@@ -151,13 +161,17 @@ export function VoiceControls({ room, connected, enabled, selfId, send, onSpeaki
 
   return <div className="voice-controls" aria-label="음성 대화">
     {meeting && <RtkParticipantsAudio meeting={meeting} />}
-    {!enabled ? <span className="voice-state">관리자가 음성 대화를 껐습니다</span> : status === 'joined' ? <>
-      <span className="voice-state">음성 연결됨</span>
-      <button type="button" onClick={toggleMic}>{muted ? '마이크 켜기' : '마이크 끄기'}</button>
-      <button type="button" onClick={leave}>음성 나가기</button>
-    </> : <button type="button" onClick={join} disabled={!connected || status === 'joining'}>
-      {status === 'joining' ? '음성 연결 중…' : status === 'error' ? '음성 다시 연결' : '음성 참여'}
+    {!enabled ? <span className="voice-state voice-disabled"><i />음성 사용 중지</span> : status === 'joined' ? <>
+      <span className="voice-state voice-connected"><i />음성 연결됨</span>
+      <button className={`voice-button mic-button ${muted ? '' : 'mic-active'}`} type="button" onClick={toggleMic} aria-pressed={!muted}>
+        <VoiceIcon name={muted ? 'mic' : 'micOff'} /><span>{muted ? '마이크 켜기' : '마이크 끄기'}</span>
+      </button>
+      <button className="voice-button leave-voice" type="button" onClick={leave}>
+        <VoiceIcon name="leave" /><span>나가기</span>
+      </button>
+    </> : <button className="voice-button join-voice" type="button" onClick={join} disabled={!connected || status === 'joining'}>
+      <VoiceIcon name="headset" /><span>{status === 'joining' ? '연결 중…' : status === 'error' ? '다시 연결' : '음성 참여'}</span>
     </button>}
-    {error && <span className="voice-error" role="alert">{error}</span>}
+    {error && <span className="voice-error" role="alert"><strong>음성 연결 오류</strong>{error}</span>}
   </div>;
 }
