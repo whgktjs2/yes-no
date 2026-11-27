@@ -26,14 +26,14 @@ function readRoom() {
 const invitation = (room: string) => `${location.origin}${location.pathname}#room=${room}`;
 const workerReady = () => navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).then(() => navigator.serviceWorker.ready);
 
-function StatusPanel({ member, label, connected, mine = false, onRename, children }: {
-  member?: MemberView; label: string; connected: boolean; mine?: boolean; onRename?: () => void; children?: React.ReactNode;
+function StatusPanel({ member, label, connected, speaking = false, mine = false, onRename, children }: {
+  member?: MemberView; label: string; connected: boolean; speaking?: boolean; mine?: boolean; onRename?: () => void; children?: React.ReactNode;
 }) {
   const available = connected && (mine || member?.online);
   const value = available ? member?.choice : null;
   const text = !connected ? (mine ? '연결 끊김' : '상태 확인 중') : !member ? '상대방 기다리는 중' : !available ? '연결 끊김' : value || '선택 전';
   const displayName = member?.name || (mine ? '나' : '상대방');
-  return <section className={`status-panel ${value?.toLowerCase() || 'neutral'} ${mine ? 'mine' : 'peer'}`} aria-label={`${label} 상태`}>
+  return <section className={`status-panel ${value?.toLowerCase() || 'neutral'} ${mine ? 'mine' : 'peer'} ${speaking && available && member?.voiceJoined && !member.voiceMuted ? 'speaking' : ''}`} aria-label={`${label} 상태`}>
     <div className="panel-top">{mine ? <button className="panel-label name-trigger" type="button" onClick={onRename} disabled={!connected} aria-label={`${label} 이름 변경`} title="내 이름 변경">{label}</button> : <span className="panel-label">{label}</span>}<span className="panel-actions">{available && member?.voiceJoined && <span className="voice-badge">{member.voiceMuted ? '음성 참여' : '마이크 켜짐'}</span>}{mine && <button className="edit-name" type="button" onClick={onRename} disabled={!connected} aria-label="내 이름 변경" title="내 이름 변경"><Icon name="edit" /></button>}<span className={`status-dot ${available && member ? 'on' : ''}`} aria-label={available && member ? '연결됨' : '연결 안 됨'} /></span></div>
     {value ? <div className="status-center"><strong className={`status-name ${[...displayName].length > 5 ? 'long-name' : ''}`} data-testid={mine ? 'my-status' : 'peer-status'} data-choice={value}>{displayName}</strong></div> : <div className="status-value status-text" data-testid={mine ? 'my-status' : 'peer-status'}>{text}</div>}
     {children}
@@ -48,6 +48,7 @@ function App() {
   const [toasts, setToasts] = useState<{ id: number; text: string }[]>([]);
   const [dialog, setDialog] = useState<'leave' | 'notifications' | 'share' | 'name' | null>(null);
   const [nameInput, setNameInput] = useState('');
+  const [speakingIds, setSpeakingIds] = useState<Set<string>>(new Set());
   const [pushKey, setPushKey] = useState<string | null>(null);
   const [pushBusy, setPushBusy] = useState(false);
   const notify = useCallback((text: string) => {
@@ -178,16 +179,16 @@ function App() {
     </div> : error || !API_URL ? <div className="connection-card"><span className="eyebrow">잠시 확인해 주세요</span><h1>{error || '연결 설정이 필요합니다.'}</h1><p>{!API_URL ? 'README의 안내에 따라 서버 주소를 설정해 주세요.' : '방 코드와 연결 상태를 확인한 뒤 다시 시도해 주세요.'}</p><div className="dialog-actions"><button className="secondary-button" onClick={leave}>시작 화면으로</button><button className="primary-button" onClick={connection.retry}>다시 연결</button></div></div> : <>
       <div className="board" aria-busy={!snapshot}>
         <div className={`peers ${peers.length > 2 ? 'many-peers' : peers.length > 1 ? 'two-peers' : ''}`} aria-label="상대방 영역">
-          {peers.length ? peers.map(member => <StatusPanel key={member.id} member={member} label={peerLabel(snapshot!, member.id)} connected={online} />) : <StatusPanel label="상대방" connected={online} />}
+          {peers.length ? peers.map(member => <StatusPanel key={member.id} member={member} label={peerLabel(snapshot!, member.id)} connected={online} speaking={speakingIds.has(member.id)} />) : <StatusPanel label="상대방" connected={online} />}
         </div>
-        <StatusPanel member={self} label={self ? currentMemberLabel(snapshot!.members, self.id, '나') : '나'} connected={online} mine onRename={() => { setNameInput(self?.name || ''); setDialog('name'); }}>
+        <StatusPanel member={self} label={self ? currentMemberLabel(snapshot!.members, self.id, '나') : '나'} connected={online} speaking={!!self && speakingIds.has(self.id)} mine onRename={() => { setNameInput(self?.name || ''); setDialog('name'); }}>
           <div className="my-controls"><p>{pending ? '전달하는 중…' : online ? '나의 상태를 선택하세요' : '다시 연결되면 선택할 수 있어요'}</p><div className="choice-buttons">
             <button className="choice no-choice" onClick={() => connection.choose('NO')} disabled={!online || !!pending} aria-pressed={self?.choice === 'NO'}>NO</button>
             <button className="choice yes-choice" onClick={() => connection.choose('YES')} disabled={!online || !!pending} aria-pressed={self?.choice === 'YES'}>YES</button>
           </div></div>
         </StatusPanel>
       </div>
-      <footer className="room-footer"><span><i className={online ? 'live-dot' : 'offline-dot'} />{online ? '서로의 지금을 실시간으로' : '연결을 확인하고 있어요. 잠시만 기다려 주세요.'}</span><VoiceControls room={room} connected={online} send={connection.send} /><button onClick={share}>초대 링크 복사 <Icon name="copy" /></button></footer>
+      <footer className="room-footer"><span><i className={online ? 'live-dot' : 'offline-dot'} />{online ? '서로의 지금을 실시간으로' : '연결을 확인하고 있어요. 잠시만 기다려 주세요.'}</span><VoiceControls room={room} connected={online} selfId={self?.id || null} send={connection.send} onSpeakingChange={setSpeakingIds} /><button onClick={share}>초대 링크 복사 <Icon name="copy" /></button></footer>
     </>}
 
     <div className="toast-stack" role="status" aria-live="polite" aria-atomic="false">{toasts.map(t => <div className="toast" key={t.id}><span className="toast-dot" />{t.text}</div>)}</div>
