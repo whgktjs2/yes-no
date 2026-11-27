@@ -138,8 +138,13 @@ export class Room extends DurableObject<Env> {
       method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body), signal: AbortSignal.timeout(10_000),
     });
-    const result = await response.json() as { success?: boolean; data?: Record<string, unknown> };
-    if (!response.ok || !result.success || !result.data) throw new Error('VOICE_SERVICE_FAILED');
+    const result = await response.json() as { success?: boolean; data?: Record<string, unknown>; errors?: Array<{ code?: number }> };
+    if (!response.ok || !result.success || !result.data) {
+      const operation = path === '/meetings' ? '회의 생성' : '참여자 등록';
+      const code = result.errors?.[0]?.code;
+      console.error('RealtimeKit API failed', { operation, status: response.status, code });
+      throw new Error(`${operation} 실패: HTTP ${response.status}${code ? `, 코드 ${code}` : ''}`);
+    }
     return result.data;
   }
 
@@ -185,7 +190,11 @@ export class Room extends DurableObject<Env> {
       member.voice = { id: data.id, token: authToken, expiresAt };
       await this.save();
       return json({ authToken });
-    } catch { return json({ error: '음성 연결을 준비하지 못했습니다. 설정과 연결을 확인해 주세요.' }, 502); }
+    } catch (cause) {
+      const detail = cause instanceof Error && /^(회의 생성|참여자 등록) 실패: HTTP \d+/.test(cause.message)
+        ? ` (${cause.message})` : '';
+      return json({ error: `음성 연결을 준비하지 못했습니다${detail}. 설정과 연결을 확인해 주세요.` }, 502);
+    }
   }
 
   async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer) {
