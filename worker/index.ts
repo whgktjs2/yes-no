@@ -5,6 +5,7 @@ import { emptyRoom, joinRoom, nextOfflineEviction, reconcilePresence, setChoice,
 
 interface Env {
   ROOMS: DurableObjectNamespace<Room>;
+  VOICE_GATE: DurableObjectNamespace<VoiceGate>;
   ALLOWED_ORIGINS: string;
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
@@ -13,6 +14,7 @@ interface Env {
   RTK_APP_ID?: string;
   RTK_API_TOKEN?: string;
   RTK_VOICE_PRESET?: string;
+  VOICE_ADMIN_PASSWORD?: string;
 }
 interface Attachment { memberId?: string; lastSeen: number; visible: boolean; lastChange?: number }
 const HEARTBEAT_TIMEOUT = 25_000;
@@ -21,6 +23,14 @@ const IDLE_EXPIRY = 24 * 60 * 60 * 1000;
 const json = (data: unknown, status = 200) => Response.json(data, { status });
 const origins = (env: Env) => env.ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean);
 const pushEnabled = (env: Env) => !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT);
+const voiceGate = (env: Env) => env.VOICE_GATE.get(env.VOICE_GATE.idFromName('global'));
+async function adminAuthorized(request: Request, env: Env) {
+  const secret = env.VOICE_ADMIN_PASSWORD;
+  const supplied = request.headers.get('Authorization')?.replace(/^Bearer /i, '') || '';
+  if (!secret || secret.length < 16 || !supplied || supplied.length > 256) return false;
+  const [a, b] = await Promise.all([crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret)), crypto.subtle.digest('SHA-256', new TextEncoder().encode(supplied))]);
+  return new Uint8Array(a).every((byte, index) => byte === new Uint8Array(b)[index]);
+}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -29,13 +39,25 @@ export default {
     const origin = request.headers.get('Origin');
     if (!origin || !origins(env).includes(origin)) return json({ error: '허용되지 않은 접속 주소입니다.' }, 403);
     const cors = {
-      'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, X-Room-Token', 'Vary': 'Origin', 'Cache-Control': 'no-store',
+      'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, X-Room-Token, Authorization', 'Vary': 'Origin', 'Cache-Control': 'no-store',
     };
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     let response: Response;
     if (url.pathname === '/api/config' && request.method === 'GET') {
       response = json({ pushPublicKey: pushEnabled(env) ? env.VAPID_PUBLIC_KEY : null });
+    } else if (url.pathname === '/api/voice-policy' && request.method === 'GET') {
+      response = await voiceGate(env).fetch('https://voice.internal/state');
+    } else if (url.pathname === '/api/admin/voice' && ['GET', 'PUT'].includes(request.method)) {
+      if (!env.VOICE_ADMIN_PASSWORD || env.VOICE_ADMIN_PASSWORD.length < 16) response = json({ error: '관리자 암호를 먼저 설정해 주세요.' }, 503);
+      else if (!await adminAuthorized(request, env)) response = json({ error: '관리자 암호가 올바르지 않습니다.' }, 401);
+      else if (request.method === 'GET') response = await voiceGate(env).fetch('https://voice.internal/state');
+      else {
+        let body: unknown;
+        try { body = await request.json(); } catch { body = null; }
+        if (!body || typeof body !== 'object' || typeof (body as { enabled?: unknown }).enabled !== 'boolean') response = json({ error: '잘못된 설정입니다.' }, 400);
+        else response = await voiceGate(env).fetch('https://voice.internal/state', { method: 'PUT', body: JSON.stringify(body) });
+      }
     } else if (url.pathname === '/api/rooms' && request.method === 'POST') {
       response = json({ error: '빈 방 코드를 찾지 못했습니다. 잠시 후 다시 시도해 주세요.' }, 503);
       for (let attempt = 0; attempt < 32; attempt++) {
@@ -61,9 +83,75 @@ export default {
   },
 };
 
+export class VoiceGate extends DurableObject<Env> {
+  private disconnecting?: Promise<number>;
+  private async enabled() { return await this.ctx.storage.get<boolean>('enabled') ?? false; }
+  private async rooms() { return await this.ctx.storage.get<string[]>('rooms') ?? []; }
+
+  private async disconnectRooms(): Promise<number> {
+    this.disconnecting ||= this.closeRegisteredRooms().finally(() => { this.disconnecting = undefined; });
+    return this.disconnecting;
+  }
+
+  private async closeRegisteredRooms() {
+    const codes = await this.rooms();
+    const failed: string[] = [];
+    for (let i = 0; i < codes.length; i += 20) {
+      await Promise.all(codes.slice(i, i + 20).map(async code => {
+        try {
+          const response = await this.env.ROOMS.get(this.env.ROOMS.idFromName(code)).fetch('https://room.internal/voice-off', { method: 'POST' });
+          if (!response.ok) failed.push(code);
+        } catch { failed.push(code); }
+      }));
+    }
+    const completed = new Set(codes.filter(code => !failed.includes(code)));
+    const remaining = await this.ctx.storage.transaction(async tx => {
+      const current = await tx.get<string[]>('rooms') ?? [];
+      const next = current.filter(code => !completed.has(code));
+      await tx.put('rooms', next);
+      return next.length;
+    });
+    if (remaining) await this.ctx.storage.setAlarm(Date.now() + 5_000);
+    return remaining;
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const path = new URL(request.url).pathname;
+    if (path === '/state' && request.method === 'GET') return json({ enabled: await this.enabled() });
+    if (path === '/register' && request.method === 'POST') {
+      const { code } = await request.json() as { code?: string };
+      if (!code || !ROOM_PATTERN.test(code)) return json({ error: 'INVALID_ROOM' }, 400);
+      await this.ctx.storage.transaction(async tx => {
+        const rooms = await tx.get<string[]>('rooms') ?? [];
+        if (!rooms.includes(code)) await tx.put('rooms', [...rooms, code]);
+      });
+      return json({ enabled: await this.enabled() });
+    }
+    if (path === '/state' && request.method === 'PUT') {
+      const { enabled } = await request.json() as { enabled?: boolean };
+      if (typeof enabled !== 'boolean') return json({ error: 'INVALID_STATE' }, 400);
+      if (enabled) {
+        if (!await this.enabled() && (await this.rooms()).length && await this.disconnectRooms())
+          return json({ error: '진행 중인 음성을 모두 종료하지 못했습니다. 잠시 후 다시 시도해 주세요.', enabled: false }, 502);
+        await this.ctx.storage.put('enabled', true);
+        return json({ enabled: true });
+      }
+      await this.ctx.storage.put('enabled', false);
+      const failed = await this.disconnectRooms();
+      return failed ? json({ error: `${failed}개 방의 음성 종료를 재시도 중입니다.`, enabled: false }, 502) : json({ enabled: false });
+    }
+    return json({ error: 'NOT_FOUND' }, 404);
+  }
+
+  async alarm() {
+    if (!await this.enabled()) await this.disconnectRooms();
+  }
+}
+
 export class Room extends DurableObject<Env> {
   private room?: RoomState;
   private voiceCreating?: Promise<string>;
+  private voiceSyncing?: Promise<boolean>;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -115,6 +203,7 @@ export class Room extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
+    if (path === '/voice-off' && request.method === 'POST') return this.forceVoiceOff();
     if (path.endsWith('/voice') && request.method === 'POST') return this.voiceToken(request);
     if (path === '/init' && request.method === 'POST') {
       if (this.room) return json({ error: 'ROOM_EXISTS' }, 409);
@@ -156,15 +245,68 @@ export class Room extends DurableObject<Env> {
     });
   }
 
+  private async voiceAllowed(register = false) {
+    const response = await voiceGate(this.env).fetch(`https://voice.internal${register ? '/register' : '/state'}`, register
+      ? { method: 'POST', body: JSON.stringify({ code: this.ctx.id.name }) } : undefined);
+    if (!response.ok) throw new Error('VOICE_POLICY_UNAVAILABLE');
+    const data = await response.json() as { enabled: boolean };
+    return data.enabled;
+  }
+
+  private async syncVoicePolicy(ws?: WebSocket) {
+    this.voiceSyncing ||= (async () => {
+      const enabled = await this.voiceAllowed(!!this.room?.voiceMeetingId);
+      if (!enabled && this.room?.voiceMeetingId) await this.forceVoiceOff();
+      return enabled;
+    })().finally(() => { this.voiceSyncing = undefined; });
+    const enabled = await this.voiceSyncing;
+    if (ws) this.send(ws, { type: 'voicePolicy', enabled });
+    return enabled;
+  }
+
+  private async forceVoiceOff(): Promise<Response> {
+    if (!this.room) return json({ ok: true });
+    for (const ws of this.activeSockets()) this.send(ws, { type: 'voicePolicy', enabled: false });
+    for (const member of this.room.members) { member.voiceJoined = false; member.voiceMuted = true; }
+    this.room.revision++;
+    await this.save();
+    this.broadcast();
+    const meetingId = this.room.voiceMeetingId;
+    if (!meetingId) return json({ ok: true });
+    const { RTK_ACCOUNT_ID: account, RTK_APP_ID: app, RTK_API_TOKEN: token } = this.env;
+    if (!account || !app || !token) return json({ error: 'VOICE_NOT_CONFIGURED' }, 503);
+    try {
+      const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account)}/realtime/kit/${encodeURIComponent(app)}/meetings/${encodeURIComponent(meetingId)}`, {
+        method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'INACTIVE' }), signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok && response.status !== 404) throw new Error(`HTTP ${response.status}`);
+      if (response.ok && !(await response.json() as { success?: boolean }).success) throw new Error('RealtimeKit rejected meeting termination');
+      if (this.room.voiceMeetingId === meetingId) {
+        delete this.room.voiceMeetingId;
+        for (const member of this.room.members) delete member.voice;
+        await this.save();
+      }
+      return json({ ok: true });
+    } catch (error) {
+      console.error('RealtimeKit meeting termination failed', error);
+      return json({ error: 'VOICE_TERMINATION_FAILED' }, 502);
+    }
+  }
+
   private async voiceToken(request: Request): Promise<Response> {
     if (!this.room) return json({ error: '방이 만료되었습니다.' }, 404);
     const token = request.headers.get('X-Room-Token');
     const member = this.room.members.find(m => m.token === token);
     const online = this.activeSockets().some(ws => this.attachment(ws).memberId === member?.id);
     if (!member || !online) return json({ error: '먼저 방에 연결해 주세요.' }, 403);
+    if (!await this.voiceAllowed(!!this.room.voiceMeetingId)) return json({ error: '관리자가 음성 대화를 껐습니다.' }, 403);
     if (!this.env.RTK_VOICE_PRESET || !this.env.RTK_API_TOKEN || !this.env.RTK_APP_ID || !this.env.RTK_ACCOUNT_ID)
       return json({ error: '음성 서비스 설정이 아직 완료되지 않았습니다.' }, 503);
-    if (member.voice && member.voice.expiresAt > Date.now() + 60_000) return json({ authToken: member.voice.token });
+    if (member.voice && member.voice.expiresAt > Date.now() + 60_000) {
+      if (!await this.voiceAllowed(true)) return json({ error: '관리자가 음성 대화를 껐습니다.' }, 403);
+      return json({ authToken: member.voice.token });
+    }
     try {
       if (!this.room.voiceMeetingId) {
         this.voiceCreating ||= this.realtime('/meetings', { title: 'YES/NO voice room' }).then(async data => {
@@ -175,6 +317,7 @@ export class Room extends DurableObject<Env> {
         }).finally(() => { this.voiceCreating = undefined; });
         await this.voiceCreating;
       }
+      if (!await this.voiceAllowed(true)) { await this.forceVoiceOff(); return json({ error: '관리자가 음성 대화를 껐습니다.' }, 403); }
       if (member.voice) {
         this.ctx.waitUntil(this.removeVoiceParticipant(this.room.voiceMeetingId!, member.voice.id).catch(() => {}));
         delete member.voice;
@@ -189,6 +332,7 @@ export class Room extends DurableObject<Env> {
       if (typeof authToken !== 'string' || typeof data.id !== 'string') throw new Error('VOICE_SERVICE_FAILED');
       member.voice = { id: data.id, token: authToken, expiresAt };
       await this.save();
+      if (!await this.voiceAllowed(true)) { await this.forceVoiceOff(); return json({ error: '관리자가 음성 대화를 껐습니다.' }, 403); }
       return json({ authToken });
     } catch (cause) {
       const detail = cause instanceof Error && /^(회의 생성|참여자 등록) 실패: HTTP \d+/.test(cause.message)
@@ -228,6 +372,7 @@ export class Room extends DurableObject<Env> {
       reconcilePresence(this.room, new Set(this.activeSockets().map(socket => this.attachment(socket).memberId).filter((id): id is string => !!id)), Date.now());
       await this.save();
       this.broadcast();
+      try { await this.syncVoicePolicy(ws); } catch { this.send(ws, { type: 'voicePolicy', enabled: false }); }
       await this.schedule();
       return;
     }
@@ -238,7 +383,9 @@ export class Room extends DurableObject<Env> {
       if (typeof data.visible === 'boolean') attachment.visible = data.visible;
       ws.serializeAttachment(attachment);
       this.send(ws, { type: 'pong' });
+      if (this.room.voiceMeetingId) this.ctx.waitUntil(this.syncVoicePolicy(ws).catch(() => {}));
     } else if (data.type === 'voice' && typeof data.joined === 'boolean' && typeof data.muted === 'boolean') {
+      if (data.joined && !await this.voiceAllowed(true)) return this.fail(ws, 'VOICE_DISABLED', '관리자가 음성 대화를 껐습니다.');
       if (data.joined && !member.voice) return this.fail(ws, 'VOICE_UNAUTHORIZED', '음성 참여 자격을 확인할 수 없습니다.');
       member.voiceJoined = data.joined;
       member.voiceMuted = data.muted;

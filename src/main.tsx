@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { API_URL, peerLabel, storageGet, storageRemove, storageSet, useRoom } from './connection';
 import { emptyPeerOrder, nextDemotionAt, reconcilePeerOrder } from './peer-order';
 import { VoiceControls } from './voice';
+import { Admin } from './admin';
 import { currentMemberLabel, formatRoom, MAX_PARTICIPANTS, normalizeRoom, ROOM_PATTERN, type MemberView } from '../shared/protocol';
 import './styles.css';
 
@@ -188,7 +189,7 @@ function App() {
           </div></div>
         </StatusPanel>
       </div>
-      <footer className="room-footer"><span><i className={online ? 'live-dot' : 'offline-dot'} />{online ? '서로의 지금을 실시간으로' : '연결을 확인하고 있어요. 잠시만 기다려 주세요.'}</span><VoiceControls room={room} connected={online} selfId={self?.id || null} send={connection.send} onSpeakingChange={setSpeakingIds} /><button onClick={share}>초대 링크 복사 <Icon name="copy" /></button></footer>
+      <footer className="room-footer"><span><i className={online ? 'live-dot' : 'offline-dot'} />{online ? '서로의 지금을 실시간으로' : '연결을 확인하고 있어요. 잠시만 기다려 주세요.'}</span><VoiceControls room={room} connected={online} enabled={connection.voiceEnabled} selfId={self?.id || null} send={connection.send} onSpeakingChange={setSpeakingIds} /><button onClick={share}>초대 링크 복사 <Icon name="copy" /></button></footer>
     </>}
 
     <div className="toast-stack" role="status" aria-live="polite" aria-atomic="false">{toasts.map(t => <div className="toast" key={t.id}><span className="toast-dot" />{t.text}</div>)}</div>
@@ -202,4 +203,14 @@ function App() {
   </main>;
 }
 
-createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
+function Root() {
+  const [admin, setAdmin] = useState(location.hash === '#admin');
+  useEffect(() => {
+    const update = () => setAdmin(location.hash === '#admin');
+    window.addEventListener('hashchange', update);
+    return () => window.removeEventListener('hashchange', update);
+  }, []);
+  return admin ? <Admin /> : <App />;
+}
+
+createRoot(document.getElementById('root')!).render(<StrictMode><Root /></StrictMode>);

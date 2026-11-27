@@ -21,6 +21,7 @@ export function useRoom(room: string | null, notify: (text: string) => void) {
   const [error, setError] = useState('');
   const [pending, setPending] = useState<Choice | null>(null);
   const [pushOn, setPushOn] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
   const latest = useRef<Snapshot | null>(null);
@@ -30,10 +31,11 @@ export function useRoom(room: string | null, notify: (text: string) => void) {
   useEffect(() => {
     if (!room || !API_URL) return;
     let stopped = false, fatal = false, failures = 0, lastReceived = Date.now();
+    let lastVoiceOff = 0;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     const seen = new Set<string>();
     latest.current = null;
-    setSnapshot(null); setError(''); setPending(null); setPushOn(false);
+    setSnapshot(null); setError(''); setPending(null); setPushOn(false); setVoiceEnabled(false);
     const connect = () => {
       if (stopped || fatal) return;
       if (!navigator.onLine) { setStatus('offline'); return; }
@@ -64,6 +66,9 @@ export function useRoom(room: string | null, notify: (text: string) => void) {
         } else if (message.type === 'subscribed') {
           setPushOn(message.enabled);
           notifyRef.current(message.enabled ? '상대방의 변경 알림을 켰습니다.' : '시스템 알림을 껐습니다.');
+        } else if (message.type === 'voicePolicy') {
+          if (!message.enabled) lastVoiceOff = Date.now();
+          setVoiceEnabled(message.enabled);
         }
       };
       ws.onclose = event => {
@@ -84,6 +89,15 @@ export function useRoom(room: string | null, notify: (text: string) => void) {
         else if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping', visible: !document.hidden }));
       }
     }, 5000);
+    const refreshVoice = () => {
+      const started = Date.now();
+      return fetch(`${API_URL}/api/voice-policy`, { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => { if (!stopped && data && typeof data.enabled === 'boolean' && !(data.enabled && started < lastVoiceOff)) setVoiceEnabled(data.enabled); })
+      .catch(() => {});
+    };
+    void refreshVoice();
+    const voiceInterval = setInterval(refreshVoice, 15_000);
     const onOffline = () => { setStatus('offline'); setPending(null); wsRef.current?.close(); };
     const onOnline = () => { if (fatal) return; clearTimeout(retryTimer); if (!wsRef.current || wsRef.current.readyState > WebSocket.OPEN) connect(); };
     const onVisible = () => {
@@ -97,7 +111,7 @@ export function useRoom(room: string | null, notify: (text: string) => void) {
     document.addEventListener('visibilitychange', onVisible);
     connect();
     return () => {
-      stopped = true; clearTimeout(retryTimer); clearInterval(interval);
+      stopped = true; clearTimeout(retryTimer); clearInterval(interval); clearInterval(voiceInterval);
       window.removeEventListener('offline', onOffline); window.removeEventListener('online', onOnline);
       document.removeEventListener('visibilitychange', onVisible);
       wsRef.current?.close(); wsRef.current = null;
@@ -112,5 +126,5 @@ export function useRoom(room: string | null, notify: (text: string) => void) {
     if (status !== 'connected' || pending) return;
     if (send({ type: 'choice', choice })) setPending(choice);
   };
-  return { snapshot, status, error, pending, pushOn, send, choose, retry: () => setAttempt(n => n + 1) };
+  return { snapshot, status, error, pending, pushOn, voiceEnabled, send, choose, retry: () => setAttempt(n => n + 1) };
 }

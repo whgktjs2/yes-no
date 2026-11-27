@@ -5,8 +5,8 @@ import { API_URL, tokenFor } from './connection';
 
 type Meeting = Awaited<ReturnType<typeof RealtimeKitClient.init>>;
 
-export function VoiceControls({ room, connected, selfId, send, onSpeakingChange }: {
-  room: string; connected: boolean; selfId: string | null;
+export function VoiceControls({ room, connected, enabled, selfId, send, onSpeakingChange }: {
+  room: string; connected: boolean; enabled: boolean; selfId: string | null;
   send: (message: unknown) => boolean; onSpeakingChange: (ids: Set<string>) => void;
 }) {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
@@ -40,8 +40,8 @@ export function VoiceControls({ room, connected, selfId, send, onSpeakingChange 
   };
 
   useEffect(() => {
-    if (!connected) leave();
-  }, [connected, room]);
+    if (!connected || !enabled) leave();
+  }, [connected, enabled, room]);
   useEffect(() => () => { generation.current++; if (meetingRef.current) void meetingRef.current.leave().catch(() => {}); }, [room]);
 
   useEffect(() => {
@@ -97,7 +97,7 @@ export function VoiceControls({ room, connected, selfId, send, onSpeakingChange 
   }, [meeting, muted, selfId, onSpeakingChange]);
 
   const join = async () => {
-    if (!connected || status === 'joining') return;
+    if (!connected || !enabled || status === 'joining') return;
     const currentGeneration = ++generation.current;
     setStatus('joining');
     setError('');
@@ -151,7 +151,7 @@ export function VoiceControls({ room, connected, selfId, send, onSpeakingChange 
 
   return <div className="voice-controls" aria-label="음성 대화">
     {meeting && <RtkParticipantsAudio meeting={meeting} />}
-    {status === 'joined' ? <>
+    {!enabled ? <span className="voice-state">관리자가 음성 대화를 껐습니다</span> : status === 'joined' ? <>
       <span className="voice-state">음성 연결됨</span>
       <button type="button" onClick={toggleMic}>{muted ? '마이크 켜기' : '마이크 끄기'}</button>
       <button type="button" onClick={leave}>음성 나가기</button>

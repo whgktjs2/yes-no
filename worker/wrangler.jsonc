@@ -3,8 +3,8 @@
   "name": "yes-no-together-api",
   "main": "index.ts",
   "compatibility_date": "2026-11-01",
-  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }, { "name": "VOICE_GATE", "class_name": "VoiceGate" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }, { "tag": "v2", "new_sqlite_classes": ["VoiceGate"] }],
   "vars": {
     "ALLOWED_ORIGINS": "https://whgktjs2.github.io,http://127.0.0.1:5173,http://localhost:5173"
 

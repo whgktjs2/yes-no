@@ -13,6 +13,7 @@ export type ServerMessage = Snapshot
   | { type: 'changed'; memberId: string; choice: Choice; eventId: string }
   | { type: 'error'; code: string; message: string }
   | { type: 'subscribed'; enabled: boolean }
+  | { type: 'voicePolicy'; enabled: boolean }
   | { type: 'pong' };
 export const ROOM_PATTERN = /^\d{4}$/;
 export const normalizeRoom = (value: string) => value.toUpperCase().replace(/[\s-]/g, '');
