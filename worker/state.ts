@@ -4,8 +4,10 @@ export interface Member {
   id: string; token: string; slot: number; choice: Choice | null; name?: string; offlineSince?: number;
   push?: { endpoint: string; keys: { auth: string; p256dh: string }; expirationTime: number | null };
   appUrl?: string;
+  voice?: { id: string; token: string; expiresAt: number };
+  voiceJoined?: boolean; voiceMuted?: boolean;
 }
-export interface RoomState { members: Member[]; nextSlot: number; revision: number; lastActivity: number }
+export interface RoomState { members: Member[]; nextSlot: number; revision: number; lastActivity: number; voiceMeetingId?: string }
 export const emptyRoom = (): RoomState => ({ members: [], nextSlot: 1, revision: 0, lastActivity: Date.now() });
 export const OFFLINE_EVICTION_MS = 10 * 60 * 1000;
 

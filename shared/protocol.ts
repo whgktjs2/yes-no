@@ -1,6 +1,6 @@
 export type Choice = 'YES' | 'NO';
-export const MAX_PARTICIPANTS = 20;
-export interface MemberView { id: string; slot: number; choice: Choice | null; online: boolean; name?: string }
+export const MAX_PARTICIPANTS = 10;
+export interface MemberView { id: string; slot: number; choice: Choice | null; online: boolean; name?: string; voiceJoined?: boolean; voiceMuted?: boolean }
 export const memberLabel = (member: Pick<MemberView, 'slot' | 'name'>, fallback: '나' | '상대방') => `#${member.slot} ${member.name || fallback}`;
 export function currentMemberLabel(members: readonly Pick<MemberView, 'id' | 'slot' | 'name'>[], memberId: string, fallback: '나' | '상대방') {
   const member = members.find(item => item.id === memberId);

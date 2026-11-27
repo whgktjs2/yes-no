@@ -2,7 +2,7 @@
 
 처음 배포한다면 [한 단계씩 따라 하는 한국어 설명서](처음부터_배포하기_설명서.md)부터 읽으세요.
 
-아이패드와 노트북에서 한 방에 최대 20명이 YES 또는 NO를 서로 전달하는 웹 앱입니다. 오른쪽은 **나**, 왼쪽은 **상대방**입니다. 3명이 참여하면 왼쪽을 위아래로 나누고, 4명 이상이면 왼쪽 목록을 스크롤해 모든 상대의 상태를 볼 수 있습니다. 각자 오른쪽 위 연필 버튼으로 자신의 이름을 바꿀 수 있습니다. 이름을 바꾸면 `#2 민지`처럼 현재 방에 남은 사람 기준 입장 순서와 이름만 표시됩니다.
+아이패드와 노트북에서 한 방에 최대 10명이 YES 또는 NO를 서로 전달하는 웹 앱입니다. 오른쪽은 **나**, 왼쪽은 **상대방**입니다. 3명이 참여하면 왼쪽을 위아래로 나누고, 4명 이상이면 왼쪽 목록을 스크롤해 모든 상대의 상태를 볼 수 있습니다. 각자 오른쪽 위 연필 버튼으로 자신의 이름을 바꿀 수 있습니다. 이름을 바꾸면 `#2 민지`처럼 현재 방에 남은 사람 기준 입장 순서와 이름만 표시됩니다.
 
 프런트엔드는 **React + TypeScript + Vite**, 실시간 서버는 **Cloudflare Workers + Durable Objects**로 구현했습니다. 웹 화면은 GitHub Pages에 게시할 수 있습니다. 배포 후에는 각 기기에서 인터넷 주소만 열면 되며, 노트북에서 서버를 실행할 필요가 없습니다.
 
@@ -12,7 +12,8 @@
 
 ## 구현한 기능
 
-- 초대 링크·숫자 4자리 방 코드로 참여, 모바일 코드 입력창은 숫자 키패드를 요청, 서버에서 최대 20명으로 제한
+- 초대 링크·숫자 4자리 방 코드로 참여, 모바일 코드 입력창은 숫자 키패드를 요청, 서버에서 최대 10명으로 제한
+- 선택해서 참여하는 음성 대화. 같은 방의 10명이 동시에 듣고 말할 수 있으며 처음에는 마이크가 꺼져 있음
 - 선택 사항인 이름 변경: 오른쪽 위 연필 또는 내 이름을 눌러 수정. 기본 표시는 `#번호 나` / `#번호 상대방`, 변경 후에는 `#번호 이름`만 표시. 번호는 현재 방에 남은 사람의 입장 순서로 다시 매겨짐. 이름은 16자 이내이며 같은 방에서 중복할 수 없음
 - 초록색 YES / 빨간색 NO, 상태 영역 중앙에는 참가자 이름과 작은 YES/NO 표시, 모든 기기에서 오른쪽 내 상태 / 왼쪽 상대방 상태 유지
 - 참여자별 독립 상태, WebSocket 실시간 전달, 변경 시 화면 알림
@@ -73,6 +74,23 @@ npm run deploy:api
 
 이 설정은 SQLite 기반 Durable Object를 생성합니다. 사용 가능 한도와 비용은 계정의 Cloudflare 요금제를 따릅니다. 배포 스크립트가 별도로 유료 플랜을 신청하지는 않습니다.
 
+### 음성 대화 설정
+
+음성은 Cloudflare RealtimeKit을 사용합니다. **기존 Worker 배포만으로는 음성이 켜지지 않습니다.** Cloudflare 대시보드의 RealtimeKit에서 앱을 만들고, 참여자 프리셋의 Meeting Type을 **Voice**로 설정하세요. 방장 승인이나 대기실은 사용하지 않습니다. 기존 4자리 코드로 YES/NO 방에 들어온 사람만 음성 참여 버튼을 누를 수 있습니다.
+
+Cloudflare 프로필에서 Realtime 권한이 있는 API 토큰을 별도로 만듭니다. 값은 GitHub 저장소나 `worker/wrangler.jsonc`에 넣지 마세요. 프로젝트 폴더의 PowerShell에서 다음 명령을 **각각** 실행하고, 표시되는 입력창에 해당 값을 붙여 넣습니다.
+
+```powershell
+npx wrangler secret put RTK_ACCOUNT_ID --config worker/wrangler.jsonc
+npx wrangler secret put RTK_APP_ID --config worker/wrangler.jsonc
+npx wrangler secret put RTK_VOICE_PRESET --config worker/wrangler.jsonc
+npx wrangler secret put RTK_API_TOKEN --config worker/wrangler.jsonc
+```
+
+`RTK_ACCOUNT_ID`는 Cloudflare 계정 ID, `RTK_APP_ID`는 새 RealtimeKit 앱 ID, `RTK_VOICE_PRESET`은 Voice 프리셋 이름, `RTK_API_TOKEN`은 비밀 API 토큰입니다. Worker와 웹 화면을 배포한 뒤 두 기기로 같은 방에 들어가 각각 **음성 참여 → 마이크 켜기**를 눌러 송신과 수신을 확인하세요. 유선·블루투스 이어폰을 연결한 상태와 통화 중 연결을 바꾸는 경우도 iPad Safari와 노트북에서 시험해야 합니다. 음성 설정이 빠져도 YES/NO는 사용할 수 있습니다.
+
+음성 전용 참여 시간에는 [RealtimeKit 요금](https://developers.cloudflare.com/realtime/realtimekit/platform/pricing/)이 적용됩니다. 방 코드가 4자리이고 방장 승인이 없으므로, 코드를 아는 사람은 빈자리가 있으면 방과 음성에 참여할 수 있습니다.
+
 ### 3. GitHub Pages 설정
 
 저장소의 **Settings → Secrets and variables → Actions → Variables**에 다음 값을 추가합니다.
@@ -125,7 +143,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-단위 검사는 20명 제한·이름 변경·상대방 정렬·재접속·독립 상태·중복 변경·푸시 주소 검증을 다룹니다. 브라우저 검사는 실제 로컬 Worker와 연결해 동시 입장·21번째 접속 차단·양방향 변경·이름 변경·10초 후 연결 끊김 정렬·재접속·자리 비우기·응답 없는 연결의 시간 초과를 확인합니다. 아이패드 화면 크기는 브라우저에서 재현하며, 실물 iPad Safari 및 운영 환경의 푸시 수신 검증을 대체하지 않습니다.
+단위 검사는 10명 제한·이름 변경·상대방 정렬·재접속·독립 상태·중복 변경·푸시 주소 검증을 다룹니다. 브라우저 검사는 실제 로컬 Worker와 연결해 동시 입장·11번째 접속 차단·양방향 변경·이름 변경·10초 후 연결 끊김 정렬·재접속·자리 비우기·응답 없는 연결의 시간 초과를 확인합니다. 아이패드 화면 크기는 브라우저에서 재현하며, 실물 iPad Safari의 음성 송수신 및 운영 환경의 푸시 수신 검증을 대체하지 않습니다.
 
 ## 주요 파일
 

@@ -21,7 +21,7 @@ test('choices, optional names and disconnections stay in sync across four device
   const peer = (slot: number) => page.locator('.peer').filter({ has: page.locator('.panel-label', { hasText: new RegExp(`^#${slot} `) }) });
   try {
     await expect(page.getByTestId('peer-status')).toHaveCount(2);
-    await expect(page.locator('.connection-indicator')).toContainText('3/20');
+    await expect(page.locator('.connection-indicator')).toContainText('3/10');
     await expect(page.locator('.mine .panel-label')).toHaveText('#1 나');
     await page.getByRole('button', { name: 'YES', exact: true }).click();
     await expect(second.page.getByTestId('peer-status').first()).toHaveAttribute('data-choice', 'YES');
@@ -55,7 +55,7 @@ test('choices, optional names and disconnections stay in sync across four device
     await expect(page.getByTestId('peer-status')).toHaveCount(3);
     await expect(page.locator('.peers')).toHaveClass(/many-peers/);
     await expect(peer(4).locator('.panel-label')).toHaveText('#4 상대방');
-    await expect(page.locator('.connection-indicator')).toContainText('4/20');
+    await expect(page.locator('.connection-indicator')).toContainText('4/10');
     await second.context.setOffline(true);
     await expect(peer(2).getByTestId('peer-status')).toHaveText('연결 끊김');
     await second.context.setOffline(false);
@@ -68,7 +68,7 @@ test('choices, optional names and disconnections stay in sync across four device
     await expect(peer(2).locator('.panel-label')).toHaveText('#2 상대방');
     await second.page.locator('.toolbar .icon-button').last().click();
     await second.page.locator('.dialog-actions .primary-button').click();
-    await expect(page.locator('.connection-indicator')).toContainText('3/20');
+    await expect(page.locator('.connection-indicator')).toContainText('3/10');
     await expect(page.locator('.peer .panel-label')).toHaveText(['#2 상대방', '#3 상대방']);
     expect(errors).toEqual([]);
   } finally { await Promise.all(contexts.map(c => c.close())); }
@@ -99,14 +99,14 @@ test('recent changes rise while a ten-second disconnection falls once', async ({
   } finally { await Promise.all([first.context.close(), second.context.close(), third.context.close()]); }
 });
 
-test('concurrent joins stop at twenty and the peer list scrolls', async ({ page }) => {
+test('concurrent joins stop at ten and the peer list scrolls', async ({ page }) => {
   await page.goto('/'); await page.locator('.create-button').click();
   await expect(page.getByTestId('my-status')).toBeVisible();
   const code = new URLSearchParams(new URL(page.url()).hash.slice(1)).get('room');
   const results = await page.evaluate(async roomCode => {
     const sockets: WebSocket[] = [];
     (window as unknown as { testSockets: WebSocket[] }).testSockets = sockets;
-    return Promise.all(Array.from({ length: 20 }, () => new Promise<string>(resolve => {
+    return Promise.all(Array.from({ length: 10 }, () => new Promise<string>(resolve => {
       const ws = new WebSocket(`ws://127.0.0.1:8787/api/rooms/${roomCode}/socket`);
       sockets.push(ws);
       const token = Array.from(crypto.getRandomValues(new Uint8Array(32)), n => n.toString(16).padStart(2, '0')).join('');
@@ -119,12 +119,23 @@ test('concurrent joins stop at twenty and the peer list scrolls', async ({ page 
       ws.onerror = () => resolve('socket-error');
     })));
   }, code);
-  expect(results.filter(result => result === 'joined')).toHaveLength(19);
+  expect(results.filter(result => result === 'joined')).toHaveLength(9);
   expect(results.filter(result => result === 'ROOM_FULL')).toHaveLength(1);
-  await expect(page.locator('.connection-indicator')).toContainText('20/20');
-  await expect(page.getByTestId('peer-status')).toHaveCount(19);
+  await expect(page.locator('.connection-indicator')).toContainText('10/10');
+  await expect(page.getByTestId('peer-status')).toHaveCount(9);
   await expect(page.locator('.peers')).toHaveCSS('overflow-y', 'auto');
   await page.evaluate(() => (window as unknown as { testSockets: WebSocket[] }).testSockets.forEach(ws => ws.close()));
+});
+
+test('voice tokens require an authenticated room connection', async ({ page }) => {
+  await page.goto('/'); await page.locator('.create-button').click();
+  await expect(page.getByTestId('my-status')).toBeVisible();
+  const code = new URLSearchParams(new URL(page.url()).hash.slice(1)).get('room');
+  const status = await page.evaluate(async roomCode => {
+    const response = await fetch(`http://127.0.0.1:8787/api/rooms/${roomCode}/voice`, { method: 'POST' });
+    return response.status;
+  }, code);
+  expect(status).toBe(403);
 });
 
 test('unresponsive connections time out and unauthenticated writes fail', async ({ page }) => {
@@ -143,9 +154,9 @@ test('unresponsive connections time out and unauthenticated writes fail', async 
     ws.onmessage = event => { if (JSON.parse(event.data).type === 'snapshot') resolve(); };
     (window as unknown as { silentSocket: WebSocket }).silentSocket = ws;
   }), code);
-  await expect(page.locator('.connection-indicator')).toContainText('2/20');
+  await expect(page.locator('.connection-indicator')).toContainText('2/10');
   await expect(page.getByTestId('peer-status')).toHaveText('연결 끊김', { timeout: 35_000 });
-  await expect(page.locator('.connection-indicator')).toContainText('1/20');
+  await expect(page.locator('.connection-indicator')).toContainText('1/10');
 });
 
 test('unknown rooms, invitation validation and small screens', async ({ page }) => {
@@ -174,7 +185,7 @@ test('new room uses a four digit code that another device can enter', async ({ b
     await other.page.locator('.join-button').click();
     await expect(other.page.getByTestId('my-status')).toBeVisible();
     await expect(other.page.locator('.room-code')).toContainText(code!);
-    await expect(page.locator('.connection-indicator')).toContainText('2/20');
+    await expect(page.locator('.connection-indicator')).toContainText('2/10');
   } finally { await other.context.close(); }
 });
 

@@ -33,7 +33,7 @@ test('Display numbers follow the current members while keeping their original or
   assert.equal(currentMemberLabel(members.slice(1), 'third', '상대방'), '#2 상대방');
 });
 
-test('A room has twenty slots; the same credential rejoins even when full', () => {
+test('A room has ten slots; the same credential rejoins even when full', () => {
   const room = emptyRoom();
   const first = joinRoom(room, 'first');
   for (let i = 1; i < MAX_PARTICIPANTS; i++) joinRoom(room, `participant-${i}`);

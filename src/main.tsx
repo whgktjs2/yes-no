@@ -2,6 +2,7 @@ import { StrictMode, useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { API_URL, peerLabel, storageGet, storageRemove, storageSet, useRoom } from './connection';
 import { emptyPeerOrder, nextDemotionAt, reconcilePeerOrder } from './peer-order';
+import { VoiceControls } from './voice';
 import { currentMemberLabel, formatRoom, MAX_PARTICIPANTS, normalizeRoom, ROOM_PATTERN, type MemberView } from '../shared/protocol';
 import './styles.css';
 
@@ -33,7 +34,7 @@ function StatusPanel({ member, label, connected, mine = false, onRename, childre
   const text = !connected ? (mine ? '연결 끊김' : '상태 확인 중') : !member ? '상대방 기다리는 중' : !available ? '연결 끊김' : value || '선택 전';
   const displayName = member?.name || (mine ? '나' : '상대방');
   return <section className={`status-panel ${value?.toLowerCase() || 'neutral'} ${mine ? 'mine' : 'peer'}`} aria-label={`${label} 상태`}>
-    <div className="panel-top">{mine ? <button className="panel-label name-trigger" type="button" onClick={onRename} disabled={!connected} aria-label={`${label} 이름 변경`} title="내 이름 변경">{label}</button> : <span className="panel-label">{label}</span>}<span className="panel-actions">{mine && <button className="edit-name" type="button" onClick={onRename} disabled={!connected} aria-label="내 이름 변경" title="내 이름 변경"><Icon name="edit" /></button>}<span className={`status-dot ${available && member ? 'on' : ''}`} aria-label={available && member ? '연결됨' : '연결 안 됨'} /></span></div>
+    <div className="panel-top">{mine ? <button className="panel-label name-trigger" type="button" onClick={onRename} disabled={!connected} aria-label={`${label} 이름 변경`} title="내 이름 변경">{label}</button> : <span className="panel-label">{label}</span>}<span className="panel-actions">{available && member?.voiceJoined && <span className="voice-badge">{member.voiceMuted ? '음성 참여' : '마이크 켜짐'}</span>}{mine && <button className="edit-name" type="button" onClick={onRename} disabled={!connected} aria-label="내 이름 변경" title="내 이름 변경"><Icon name="edit" /></button>}<span className={`status-dot ${available && member ? 'on' : ''}`} aria-label={available && member ? '연결됨' : '연결 안 됨'} /></span></div>
     {value ? <div className="status-center"><strong className={`status-name ${[...displayName].length > 5 ? 'long-name' : ''}`} data-testid={mine ? 'my-status' : 'peer-status'} data-choice={value}>{displayName}</strong></div> : <div className="status-value status-text" data-testid={mine ? 'my-status' : 'peer-status'}>{text}</div>}
     {children}
   </section>;
@@ -186,7 +187,7 @@ function App() {
           </div></div>
         </StatusPanel>
       </div>
-      <footer className="room-footer"><span><i className={online ? 'live-dot' : 'offline-dot'} />{online ? '서로의 지금을 실시간으로' : '연결을 확인하고 있어요. 잠시만 기다려 주세요.'}</span><button onClick={share}>초대 링크 복사 <Icon name="copy" /></button></footer>
+      <footer className="room-footer"><span><i className={online ? 'live-dot' : 'offline-dot'} />{online ? '서로의 지금을 실시간으로' : '연결을 확인하고 있어요. 잠시만 기다려 주세요.'}</span><VoiceControls room={room} connected={online} send={connection.send} /><button onClick={share}>초대 링크 복사 <Icon name="copy" /></button></footer>
     </>}
 
     <div className="toast-stack" role="status" aria-live="polite" aria-atomic="false">{toasts.map(t => <div className="toast" key={t.id}><span className="toast-dot" />{t.text}</div>)}</div>

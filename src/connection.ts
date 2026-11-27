@@ -7,7 +7,7 @@ export function storageGet(key: string) { try { return localStorage.getItem(key)
 export function storageSet(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* Session still works without persistence. */ } }
 export function storageRemove(key: string) { try { localStorage.removeItem(key); } catch { /* Ignore unavailable storage. */ } }
 const sessionTokens = new Map<string, string>();
-function tokenFor(room: string) {
+export function tokenFor(room: string) {
   const key = `yn:token:${room}`;
   let token = storageGet(key) || sessionTokens.get(key);
   if (!token) { token = [...crypto.getRandomValues(new Uint8Array(32))].map(b => b.toString(16).padStart(2, '0')).join(''); storageSet(key, token); sessionTokens.set(key, token); }
